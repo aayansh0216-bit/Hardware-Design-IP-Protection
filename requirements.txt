@@ -1,0 +1,36 @@
+# ==============================================================================
+# Runtime dependencies
+# Required to run the application (web server + full protection pipeline)
+# ==============================================================================
+
+# Web framework — imported in hardware_ip_protection/web/app.py
+fastapi
+
+# ASGI server — used to launch the web application:
+#   python -m uvicorn hardware_ip_protection.web.app:app --host 127.0.0.1 --port 8000
+uvicorn
+
+# Data validation / schemas — imported in pipeline/schemas.py and web/app.py
+pydantic
+
+# Elliptic-curve arithmetic for Pedersen commitments (NIST P-256)
+# Imported in crypto/pedersen.py: import ecdsa
+ecdsa
+
+# HKDF-HMAC-SHA256 watermark derivation
+# Imported in crypto/watermark_generator.py:
+#   from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+#   from cryptography.hazmat.primitives import hashes
+cryptography
+
+# ==============================================================================
+# Test / development dependencies
+# Required only to run the test suite
+# ==============================================================================
+
+# Test runner — imported in every test file
+pytest
+
+# HTTP client required by fastapi.testclient (used in test_v1_refinement_pass.py
+# and test_v1_canonical_pipeline.py)
+httpx

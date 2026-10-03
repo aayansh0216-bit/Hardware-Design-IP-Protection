@@ -1,0 +1,84 @@
+# ===========================
+# Python cache and bytecode
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# ===========================
+# Virtual environments
+# ===========================
+.venv/
+venv/
+env/
+ENV/
+.env/
+
+# ===========================
+# Environment / secrets
+# ===========================
+.env
+.env.*
+!.env.example
+
+# ===========================
+# Distribution / packaging
+# ===========================
+dist/
+build/
+*.egg-info/
+*.egg
+MANIFEST
+
+# ===========================
+# Testing and coverage
+# ===========================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# ===========================
+# Type checkers / linters
+# ===========================
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# ===========================
+# IDE / editor metadata
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===========================
+# OS metadata
+# ===========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===========================
+# Logs and temporary files
+# ===========================
+*.log
+*.tmp
+*.temp
+
+# ===========================
+# Project-specific generated artifacts
+# ===========================
+# SQLite database generated at runtime by the protection pipeline
+hardware_ip_protection/protection_records.db
