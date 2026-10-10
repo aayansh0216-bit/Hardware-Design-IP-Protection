@@ -99,6 +99,7 @@ class ProtectionRecordSchema(BaseModel):
     cig_constraints: List[List[str]] = Field(default_factory=list)
     original_rtl_sha256: str = ""
     protected_rtl_sha256: str = ""
+    structural_encoding: Optional[Dict[str, Any]] = None
 
 
 # ==============================================================================
@@ -187,6 +188,7 @@ class DisputeResultSchema(BaseModel):
     behavioral_verification: BehavioralVerificationSchema
     watermark_analysis: WatermarkAnalysisDisputeSchema
     test_vector_commitment: TestVectorCommitmentDisputeSchema
+    structural_encoding_verification: Optional[Dict[str, Any]] = None
     findings_summary: List[str]
 
 

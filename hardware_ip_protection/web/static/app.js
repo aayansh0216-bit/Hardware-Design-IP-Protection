@@ -164,6 +164,24 @@ function initProtectForm() {
         updateCapacityDisplay();
     });
 
+    // Structural Encoding Scope mode change
+    const encScopeMode = document.getElementById("encScopeMode");
+    const customScopeGroup = document.getElementById("customScopeGroup");
+    const customScopeInput = document.getElementById("customScopeInput");
+    const encScopeBadge = document.getElementById("encScopeBadge");
+
+    if (encScopeMode) {
+        encScopeMode.addEventListener("change", () => {
+            if (encScopeMode.value === "custom") {
+                if (customScopeGroup) customScopeGroup.style.display = "block";
+                if (encScopeBadge) encScopeBadge.textContent = "Custom Scope";
+            } else {
+                if (customScopeGroup) customScopeGroup.style.display = "none";
+                if (encScopeBadge) encScopeBadge.textContent = "All Steps";
+            }
+        });
+    }
+
     // Toggle Secret Reveal/Mask
     if (toggleKtxBtn && kTxInput) {
         toggleKtxBtn.addEventListener("click", () => {
@@ -194,6 +212,17 @@ function initProtectForm() {
             watermarkLength = reqBits;
         }
 
+        let encodingScope = null;
+        if (encScopeMode && encScopeMode.value === "custom") {
+            const rawVal = customScopeInput ? customScopeInput.value.trim() : "";
+            if (rawVal) {
+                const parts = rawVal.split(",").map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p) && p > 0);
+                if (parts.length > 0) {
+                    encodingScope = parts;
+                }
+            }
+        }
+
         const submitBtn = document.getElementById("protectSubmitBtn");
         submitBtn.disabled = true;
         submitBtn.innerHTML = `<span>Synthesizing &amp; Protecting...</span>`;
@@ -211,6 +240,7 @@ function initProtectForm() {
             license_type: document.getElementById("licenseType").value,
             k_tx: kTxInput.value,
             watermark_length: watermarkLength,
+            encoding_scope: encodingScope,
         };
 
         try {
@@ -295,6 +325,70 @@ function renderProtectionResults(data) {
     if (commTvG) commTvG.textContent = data.test_vectors.public_generator_g || "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296";
     const commTvH = document.getElementById("commTvH");
     if (commTvH) commTvH.textContent = data.test_vectors.public_generator_h || "021ad06fad86cbbf99815a56f6c511152d048e5e0893d02c18194e3165a6aa4db3";
+
+    // Render Structural Design Encoding (Rules 1-4)
+    if (data.structural_encoding) {
+        renderStructuralEncodingTab1(data.structural_encoding);
+    }
+}
+
+// Render Structural Encoding in Tab 1 Visualizer
+function renderStructuralEncodingTab1(enc) {
+    if (!enc) return;
+    const vEl = document.getElementById("protEncVersion");
+    if (vEl) vEl.textContent = enc.encoding_version || enc.version || "structural-v1";
+    const nEl = document.getElementById("protEncTotalNodes");
+    if (nEl) nEl.textContent = enc.total_design_nodes ?? enc.total_nodes ?? "--";
+    const wEl = document.getElementById("protEncNodeWidth");
+    if (wEl) wEl.textContent = `${enc.node_width ?? "--"} bits`;
+    const bEl = document.getElementById("protEncTotalBits");
+    if (bEl) bEl.textContent = `${enc.total_bit_length ?? enc.total_bits ?? "--"} bits`;
+    const sEl = document.getElementById("protEncScope");
+    if (sEl) {
+        const scope = enc.selected_scope || enc.scope_control_steps;
+        sEl.textContent = scope && scope.length > 0 ? `Steps [${scope.join(", ")}]` : "All Control Steps";
+    }
+    const hEl = document.getElementById("protEncHash");
+    if (hEl) {
+        const hash = enc.canonical_sha256 || "";
+        hEl.textContent = hash ? hash.substring(0, 24) + "..." : "--";
+        hEl.title = hash;
+    }
+
+    const tbody = document.getElementById("protEncTableBody");
+    if (tbody) {
+        tbody.innerHTML = "";
+        const stepGroups = enc.step_groups || enc.steps || [];
+        if (stepGroups.length > 0) {
+            stepGroups.forEach(st => {
+                const sName = st.step_name || `T${st.step_number || st.control_step}`;
+                (st.nodes || []).forEach(nd => {
+                    const tr = document.createElement("tr");
+                    const r1 = nd.rule1 ?? nd.rule1_bits ?? "--";
+                    const r2 = nd.rule2 ?? nd.rule2_bits ?? "--";
+                    const r3 = nd.rule3 ?? nd.rule3_bit ?? "--";
+                    const r4 = nd.rule4 ?? nd.rule4_bits ?? "--";
+                    const block = nd.bitstream ?? nd.assembled_block ?? `${r1}${r2}${r3}${r4}`;
+
+                    tr.innerHTML = `
+                        <td><strong>${sName}</strong></td>
+                        <td><strong>Node ${nd.node_id}</strong></td>
+                        <td><span class="rule-chip rule-match-chip">${r1}</span></td>
+                        <td><span class="rule-chip rule-match-chip">${r2}</span></td>
+                        <td><span class="rule-chip rule-match-chip">${r3}</span> <span style="font-size: 0.68rem; color: var(--text-muted);">(${nd.op_type})</span></td>
+                        <td><span class="rule-chip rule-match-chip">${r4}</span></td>
+                        <td><code style="font-family: var(--font-mono); color: var(--primary-light); font-weight: 600;">${block}</code></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+    }
+
+    const box = document.getElementById("protEncBitstreamBox");
+    if (box) box.textContent = enc.canonical_bitstream || "(empty bitstream)";
+    const bBadge = document.getElementById("protEncBitstreamBadge");
+    if (bBadge) bBadge.textContent = `${enc.total_bit_length ?? enc.total_bits ?? 0} bits`;
 }
 
 // Render Watermark Constraints Mapping Table
@@ -733,6 +827,16 @@ function initDisputeForm() {
         });
     }
 
+    // Level 2 Structural Encoding Filter Buttons
+    const btnL2All = document.getElementById("btnL2All");
+    if (btnL2All) {
+        btnL2All.addEventListener("click", () => applyL2Filter("all"));
+    }
+    const btnL2Diffs = document.getElementById("btnL2DiffsOnly");
+    if (btnL2Diffs) {
+        btnL2Diffs.addEventListener("click", () => applyL2Filter("diffs"));
+    }
+
     // Download Evidence Bundle
     document.getElementById("downloadEvidenceBtn").addEventListener("click", () => {
         if (!currentDisputeData) {
@@ -1049,6 +1153,268 @@ function renderDisputeResults(data, scenarioName, scenarioDesc) {
 
     // Secondary View: Collapsible Raw JSON Evidence Inspector
     document.getElementById("evidenceJsonBox").textContent = JSON.stringify(data.evidence_bundle, null, 2);
+
+    // Section 4: Structural Design Encoding Verification (Level 1 & Level 2)
+    renderStructuralVerificationTab2(res.structural_encoding_verification);
+}
+
+// Current filter state for Level 2 comparison
+let currentL2Filter = "all";
+
+// Render Structural Encoding Verification in Tab 2 Report
+function renderStructuralVerificationTab2(sec) {
+    const metricL1 = document.getElementById("dispMetricEncL1");
+    const repBadge = document.getElementById("reportEncBadge");
+    const l1Badge = document.getElementById("level1StatusBadge");
+    const stepsContainer = document.getElementById("l2StepsContainer");
+
+    if (!sec || !sec.level1) {
+        if (metricL1) {
+            metricL1.textContent = "NOT AVAILABLE";
+            metricL1.className = "metric-val status-info";
+        }
+        if (repBadge) {
+            repBadge.textContent = "NOT AVAILABLE";
+            repBadge.className = "badge badge-info";
+        }
+        if (l1Badge) {
+            l1Badge.textContent = "NOT AVAILABLE";
+            l1Badge.className = "badge badge-info";
+        }
+        if (stepsContainer) {
+            stepsContainer.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); padding: 0.5rem;">Structural encoding evidence could not be recovered for the investigated RTL (e.g. non-synthesizable or obfuscated schedule markers).</p>`;
+        }
+        return;
+    }
+
+    const l1 = sec.level1;
+    const l2 = sec.level2 || {};
+    const l2Summary = l2.summary || {};
+    const isExact = l1.is_exact_match === true || l1.status === "MATCH";
+
+    // Level 1 Metrics
+    if (metricL1) {
+        metricL1.textContent = isExact ? "MATCH" : "MISMATCH";
+        metricL1.className = `metric-val status-${isExact ? "match" : "invalid"}`;
+    }
+    if (repBadge) {
+        repBadge.textContent = `L1: ${isExact ? "MATCH" : "MISMATCH"}`;
+        repBadge.className = `badge ${isExact ? "badge-live" : "badge-danger"}`;
+    }
+    if (l1Badge) {
+        l1Badge.textContent = isExact ? "EXACT MATCH (100%)" : "CANONICAL MISMATCH";
+        l1Badge.className = `badge ${isExact ? "badge-live" : "badge-danger"}`;
+    }
+
+    const elRefBits = document.getElementById("l1RefBits");
+    if (elRefBits) elRefBits.textContent = `${l1.reference_bit_length ?? "--"} bits`;
+    const elSusBits = document.getElementById("l1SusBits");
+    if (elSusBits) elSusBits.textContent = `${l1.suspicious_bit_length ?? "--"} bits`;
+    const elMatchBits = document.getElementById("l1MatchBits");
+    if (elMatchBits) elMatchBits.textContent = `${l1.matching_bits ?? "--"} bits`;
+    const elDiffBits = document.getElementById("l1DiffBits");
+    if (elDiffBits) {
+        const diffs = l1.differing_bits ?? 0;
+        elDiffBits.textContent = `${diffs} bits`;
+        elDiffBits.className = `report-stat-num ${diffs === 0 ? 'status-match' : 'status-invalid'}`;
+    }
+
+    const elRefHash = document.getElementById("l1RefHash");
+    if (elRefHash) elRefHash.textContent = l1.reference_sha256 || "--";
+    const elSusHash = document.getElementById("l1SusHash");
+    if (elSusHash) elSusHash.textContent = l1.suspicious_sha256 || "--";
+    const elScopeCheck = document.getElementById("l1ScopeCheck");
+    if (elScopeCheck) {
+        const scopeStr = l1.scope_mismatch ? `⚠ Scope Mismatch` : `✓ Scope Identical`;
+        const nodeStr = l1.node_count_mismatch ? `⚠ Node Count Mismatch` : `✓ Node Count Identical (n = ${l2Summary.reference_nodes ?? '--'})`;
+        elScopeCheck.textContent = `${scopeStr} | ${nodeStr}`;
+    }
+
+    // Canonical Bitstream Boxes
+    const refBitstream = (sec.reference_encoding && sec.reference_encoding.canonical_bitstream) || l1.reference_bitstream || "(none)";
+    const susBitstream = (sec.suspicious_encoding && sec.suspicious_encoding.canonical_bitstream) || l1.suspicious_bitstream || "(none)";
+    const refBox = document.getElementById("dispRefBitstreamBox");
+    if (refBox) refBox.textContent = refBitstream;
+    const susBox = document.getElementById("dispSusBitstreamBox");
+    if (susBox) susBox.textContent = susBitstream;
+
+    // Level 2 Summary Cards
+    const elNodeComp = document.getElementById("l2NodeCountComp");
+    if (elNodeComp) elNodeComp.textContent = `${l2Summary.reference_nodes ?? '--'} / ${l2Summary.suspicious_nodes ?? '--'}`;
+    const elStepComp = document.getElementById("l2StepCountComp");
+    if (elStepComp) elStepComp.textContent = `${l2Summary.reference_steps ?? '--'} / ${l2Summary.suspicious_steps ?? '--'}`;
+    const elMatchComp = document.getElementById("l2MatchingComponents");
+    if (elMatchComp) elMatchComp.textContent = `${l2Summary.matching_components ?? '--'} / ${l2Summary.total_components_evaluated ?? '--'}`;
+    const elAgrRate = document.getElementById("l2AgreementRate");
+    if (elAgrRate) {
+        const rate = l2Summary.agreement_percentage_str || (l2Summary.agreement_ratio !== undefined ? `${(l2Summary.agreement_ratio * 100).toFixed(2)}%` : "--");
+        elAgrRate.textContent = rate;
+        elAgrRate.className = `report-stat-num ${(l2Summary.differing_components ?? 0) === 0 ? 'status-match' : 'status-invalid'}`;
+    }
+
+    const cAll = document.getElementById("countAllComponents");
+    if (cAll) cAll.textContent = l2Summary.total_components_evaluated ?? 0;
+    const cDiff = document.getElementById("countDiffComponents");
+    if (cDiff) cDiff.textContent = l2Summary.differing_components ?? 0;
+
+    // Render Steps Accordions
+    if (!stepsContainer) return;
+    stepsContainer.innerHTML = "";
+
+    const stepComparisons = l2.step_comparisons || [];
+    if (stepComparisons.length === 0) {
+        stepsContainer.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted);">No control step comparisons available.</p>`;
+        return;
+    }
+
+    const totalSteps = stepComparisons.length;
+
+    stepComparisons.forEach((st, idx) => {
+        const stepStatus = st.status || (st.matching_node_count === st.total_step_nodes ? "MATCH" : "DIFFER");
+        const hasDiff = stepStatus !== "MATCH";
+        const acc = document.createElement("div");
+        acc.className = "step-accordion";
+        acc.dataset.hasDiff = hasDiff ? "true" : "false";
+
+        // Keep open if has difference, or if total steps <= 3, or if first step
+        if (hasDiff || totalSteps <= 3 || idx === 0) {
+            acc.classList.add("open");
+        }
+
+        const stepLabel = st.step_name || `Control Step T${st.step_number}`;
+        const refCount = st.reference_node_count ?? st.total_step_nodes ?? 0;
+        const susCount = st.suspicious_node_count ?? refCount;
+        const diffCount = (st.total_step_nodes ?? refCount) - (st.matching_node_count ?? refCount);
+
+        const header = document.createElement("div");
+        header.className = "step-accordion-header";
+        header.innerHTML = `
+            <div class="step-accordion-title">
+                <span class="step-accordion-arrow">▶</span>
+                <span>${stepLabel}</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">(${refCount} ref nodes, ${susCount} sus nodes)</span>
+            </div>
+            <div>
+                ${!hasDiff
+                    ? '<span class="badge badge-live" style="font-size: 0.7rem;">✓ All Match</span>'
+                    : `<span class="badge badge-danger" style="font-size: 0.7rem;">⚠ ${diffCount > 0 ? diffCount : 1} Differ</span>`}
+            </div>
+        `;
+
+        header.addEventListener("click", () => {
+            acc.classList.toggle("open");
+        });
+
+        const body = document.createElement("div");
+        body.className = "step-accordion-body";
+
+        let rowsHtml = "";
+        const nodeList = st.nodes || [];
+        nodeList.forEach(nd => {
+            const isMatch = nd.status === "MATCH";
+            const r1 = nd.rule1 || {};
+            const r2 = nd.rule2 || {};
+            const r3 = nd.rule3 || {};
+            const r4 = nd.rule4 || {};
+
+            const r1Cell = (r1.match !== false)
+                ? `<span class="rule-chip rule-match-chip">${r1.ref ?? nd.ref_rule1 ?? "--"}</span>`
+                : `<div class="rule-diff-box"><span class="rule-diff-ref">Ref: ${r1.ref}</span><span class="rule-diff-sus">Sus: ${r1.sus}</span></div>`;
+
+            const r2Cell = (r2.match !== false)
+                ? `<span class="rule-chip rule-match-chip">${r2.ref ?? nd.ref_rule2 ?? "--"}</span>`
+                : `<div class="rule-diff-box"><span class="rule-diff-ref">Ref: ${r2.ref}</span><span class="rule-diff-sus">Sus: ${r2.sus}</span></div>`;
+
+            const r3Cell = (r3.match !== false)
+                ? `<span class="rule-chip rule-match-chip">${r3.ref ?? nd.ref_rule3 ?? "--"}</span> <span style="font-size: 0.68rem; color: var(--text-muted);">(${nd.op_type || ''})</span>`
+                : `<div class="rule-diff-box"><span class="rule-diff-ref">Ref: ${r3.ref}</span><span class="rule-diff-sus">Sus: ${r3.sus}</span></div>`;
+
+            const r4Cell = (r4.match !== false)
+                ? `<span class="rule-chip rule-match-chip">${r4.ref ?? nd.ref_rule4 ?? "--"}</span>`
+                : `<div class="rule-diff-box"><span class="rule-diff-ref">Ref: ${r4.ref}</span><span class="rule-diff-sus">Sus: ${r4.sus}</span></div>`;
+
+            const statusCell = isMatch
+                ? `<span class="status-match" style="font-size: 0.75rem;">MATCH</span>`
+                : `<span class="status-differ" style="font-size: 0.75rem;">DIFFER</span>`;
+
+            rowsHtml += `
+                <tr class="l2-node-row" data-node-diff="${!isMatch}">
+                    <td><strong>Node ${nd.node_id}</strong></td>
+                    <td>${r1Cell}</td>
+                    <td>${r2Cell}</td>
+                    <td>${r3Cell}</td>
+                    <td>${r4Cell}</td>
+                    <td>${statusCell}</td>
+                </tr>
+            `;
+        });
+
+        body.innerHTML = `
+            <div class="table-responsive">
+                <table class="reg-table" style="font-size: 0.78rem;">
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Rule 1 (Parity)</th>
+                            <th>Rule 2 (Node ID)</th>
+                            <th>Rule 3 (Op Type)</th>
+                            <th>Rule 4 (Step Count)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            </div>
+        `;
+
+        acc.appendChild(header);
+        acc.appendChild(body);
+        stepsContainer.appendChild(acc);
+    });
+
+    // Apply current filter
+    applyL2Filter(currentL2Filter);
+}
+
+// Filter Level 2 Steps and Rows: 'all' vs 'diffs'
+function applyL2Filter(filterMode) {
+    currentL2Filter = filterMode;
+    const btnAll = document.getElementById("btnL2All");
+    const btnDiffs = document.getElementById("btnL2DiffsOnly");
+    if (btnAll && btnDiffs) {
+        if (filterMode === "diffs") {
+            btnDiffs.classList.add("active");
+            btnAll.classList.remove("active");
+        } else {
+            btnAll.classList.add("active");
+            btnDiffs.classList.remove("active");
+        }
+    }
+
+    const accordions = document.querySelectorAll("#l2StepsContainer .step-accordion");
+    accordions.forEach(acc => {
+        const hasDiff = acc.dataset.hasDiff === "true";
+        if (filterMode === "diffs") {
+            if (!hasDiff) {
+                acc.style.display = "none";
+            } else {
+                acc.style.display = "";
+                acc.classList.add("open");
+                acc.querySelectorAll(".l2-node-row").forEach(row => {
+                    if (row.dataset.nodeDiff === "false") {
+                        row.style.display = "none";
+                    } else {
+                        row.style.display = "";
+                    }
+                });
+            }
+        } else {
+            acc.style.display = "";
+            acc.querySelectorAll(".l2-node-row").forEach(row => {
+                row.style.display = "";
+            });
+        }
+    });
 }
 
 // Clear Heatmap Canvas with placeholder text

@@ -22,11 +22,12 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-from ..hls.dfg import DFG
+from ..hls.dfg import DFG, DFGNode
 from ..hls.scheduler import ListScheduler, ScheduledDFG
 from ..hls.cig import CIG, ConstrainedCIG, WatermarkCIGMapper, WatermarkCapacityAnalyzer
 from ..hls.register_allocator import RegisterAllocator, RegisterAllocationResult
 from ..hls.rtl_generator import RTLGenerator
+from ..hls.structural_encoder import DesignStructuralEncoder, StructuralEncodingResult
 from ..crypto.pedersen import PedersenEngine, PedersenCommitment, CommitmentVerificationStatus
 from ..crypto.design_hasher import DesignHasher
 from ..crypto.watermark_generator import (
@@ -400,6 +401,26 @@ class ProtectionRecordStage(PipelineStage):
             "protected_rtl_sha256": prot_rtl_sha256,
         }
 
+        # Compute structural design encoding (4 rules from design encoded data.docx)
+        sched_dfg: Optional[ScheduledDFG] = ctx.get("scheduled_dfg")
+        structural_enc_dict = None
+        if sched_dfg is not None:
+            scope = ctx.get("encoding_scope")
+            try:
+                enc_res = DesignStructuralEncoder.encode_scheduled_dfg(
+                    sched_dfg,
+                    scope_control_steps=scope,
+                    allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
+                    use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                )
+                structural_enc_dict = enc_res.to_dict()
+                ctx["structural_encoding"] = structural_enc_dict
+                ctx["structural_encoding_obj"] = enc_res
+            except Exception as ex:
+                logger.warning(f"Could not compute structural encoding: {ex}")
+
+        rec_dict["structural_encoding"] = structural_enc_dict
+
         # Validate with Pydantic
         record_model = ProtectionRecordSchema(**rec_dict)
         ctx["protection_record"] = record_model
@@ -722,6 +743,169 @@ class DisputeVerificationResultStage(PipelineStage):
         findings.append(f"Watermark Pedersen Commitment: {wm_status.value} (Exact discrete-log cryptographic binding).")
         findings.append(f"Test Vector Commitment: {tv_status.value} (Verifies test vector set integrity without post-hoc cherry-picking).")
 
+        # Structural Design Encoding Verification (Level 1 & Level 2)
+        ref_enc_obj: Optional[StructuralEncodingResult] = None
+        if "structural_encoding_obj" in ctx and isinstance(ctx["structural_encoding_obj"], StructuralEncodingResult):
+            ref_enc_obj = ctx["structural_encoding_obj"]
+        elif prot_rec is not None:
+            enc_data = getattr(prot_rec, "structural_encoding", None)
+            if enc_data is None and isinstance(prot_rec, dict):
+                enc_data = prot_rec.get("structural_encoding")
+            if enc_data and "raw_dfg" in ctx:
+                try:
+                    res_cfg = ctx.get("resource_config", {"add": 2, "mul": 2, "sub": 2})
+                    ref_sched = ListScheduler(res_cfg).schedule(ctx["raw_dfg"])
+                    ref_enc_obj = DesignStructuralEncoder.encode_scheduled_dfg(
+                        ref_sched,
+                        scope_control_steps=enc_data.get("selected_scope"),
+                        allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
+                        use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                    )
+                except Exception as ex:
+                    logger.warning(f"Could not reconstruct reference encoding: {ex}")
+
+        if ref_enc_obj is None and "raw_dfg" in ctx:
+            try:
+                res_cfg = ctx.get("resource_config", {"add": 2, "mul": 2, "sub": 2})
+                ref_sched = ListScheduler(res_cfg).schedule(ctx["raw_dfg"])
+                ref_scope = ctx.get("encoding_scope")
+                ref_enc_obj = DesignStructuralEncoder.encode_scheduled_dfg(
+                    ref_sched,
+                    scope_control_steps=ref_scope,
+                    allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
+                    use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                )
+            except Exception as ex:
+                logger.warning(f"Could not compute reference encoding: {ex}")
+
+        sus_enc_obj: Optional[StructuralEncodingResult] = None
+        if ref_enc_obj is not None:
+            committed_scope = ref_enc_obj.selected_scope
+            if "suspicious_scheduled_dfg" in ctx and isinstance(ctx["suspicious_scheduled_dfg"], ScheduledDFG):
+                try:
+                    sus_enc_obj = DesignStructuralEncoder.encode_scheduled_dfg(
+                        ctx["suspicious_scheduled_dfg"],
+                        scope_control_steps=committed_scope,
+                        allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
+                        use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                    )
+                except Exception as ex:
+                    logger.warning(f"Could not encode suspicious scheduled DFG: {ex}")
+            elif "suspicious_dfg" in ctx and isinstance(ctx["suspicious_dfg"], DFG):
+                try:
+                    res_cfg = ctx.get("resource_config", {"add": 2, "mul": 2, "sub": 2})
+                    sus_sched = ListScheduler(res_cfg).schedule(ctx["suspicious_dfg"])
+                    sus_enc_obj = DesignStructuralEncoder.encode_scheduled_dfg(
+                        sus_sched,
+                        scope_control_steps=committed_scope,
+                        allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
+                        use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                    )
+                except Exception as ex:
+                    logger.warning(f"Could not encode suspicious DFG: {ex}")
+            elif ref_rtl_sha256 == sus_rtl_sha256 or "untouched" in str(sus_scenario).lower():
+                sus_enc_obj = ref_enc_obj
+            else:
+                sus_verilog = ctx.get("suspicious_verilog", "")
+                parsed = DesignStructuralEncoder.parse_scheduled_nodes_from_verilog(sus_verilog)
+                if parsed is not None and "raw_dfg" in ctx:
+                    try:
+                        raw_dfg: DFG = ctx["raw_dfg"]
+                        sus_nodes = {}
+                        for nid, nd in raw_dfg.nodes.items():
+                            sus_op = parsed.get("node_ops", {}).get(nid, nd.op_type)
+                            sus_nodes[nid] = DFGNode(
+                                node_id=nd.node_id,
+                                op_type=sus_op,
+                                inputs=nd.inputs,
+                                output=nd.output,
+                                delay=nd.delay,
+                            )
+                        sus_dfg = DFG(
+                            name=raw_dfg.name + "_sus",
+                            nodes=sus_nodes,
+                            inputs=raw_dfg.inputs,
+                            outputs=raw_dfg.outputs,
+                            coefficients=raw_dfg.coefficients,
+                        )
+                        sus_sched = ScheduledDFG(
+                            dfg=sus_dfg,
+                            node_step=parsed["node_step"],
+                            total_steps=parsed["total_steps"],
+                            resource_config=ctx.get("resource_config", {"add": 2, "mul": 2, "sub": 2}),
+                        )
+                        sus_sched.step_nodes = parsed["step_nodes"]
+                        sus_enc_obj = DesignStructuralEncoder.encode_scheduled_dfg(
+                            sus_sched,
+                            scope_control_steps=committed_scope,
+                            allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
+                            use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                        )
+                    except Exception as ex:
+                        logger.warning(f"Could not reconstruct suspicious encoding from Verilog: {ex}")
+
+        structural_verification_dict = None
+        if ref_enc_obj is not None:
+            if sus_enc_obj is not None:
+                l1_res = DesignStructuralEncoder.compare_level1(ref_enc_obj, sus_enc_obj)
+                l2_res = DesignStructuralEncoder.compare_level2(ref_enc_obj, sus_enc_obj)
+            else:
+                l1_res = {
+                    "level": 1,
+                    "comparison_type": "EXACT_CANONICAL_ENCODING",
+                    "status": "NOT_AVAILABLE",
+                    "is_exact_match": False,
+                    "reference_bit_length": len(ref_enc_obj.canonical_bitstream),
+                    "suspicious_bit_length": 0,
+                    "matching_bits": 0,
+                    "differing_bits": len(ref_enc_obj.canonical_bitstream),
+                    "match_rate": 0.0,
+                    "match_percentage_str": "N/A",
+                    "reason": "Suspicious RTL does not contain recoverable scheduled node markers (stripped/unwatermarked)",
+                    "disclaimer": "Level 1 structural evidence only. Factual mathematical comparison; does NOT claim legal ownership determination.",
+                }
+                l2_res = {
+                    "level": 2,
+                    "comparison_type": "RULE_COMPONENT_LEVEL",
+                    "summary": {
+                        "reference_nodes": ref_enc_obj.total_design_nodes,
+                        "suspicious_nodes": 0,
+                        "reference_steps": ref_enc_obj.total_steps,
+                        "suspicious_steps": 0,
+                        "reference_bits": len(ref_enc_obj.canonical_bitstream),
+                        "suspicious_bits": 0,
+                        "total_components_evaluated": 0,
+                        "matching_components": 0,
+                        "differing_components": 0,
+                        "agreement_ratio": None,
+                        "agreement_percentage_str": "N/A",
+                        "reason": "Suspicious RTL does not contain recoverable scheduled node markers",
+                    },
+                    "step_comparisons": [],
+                    "differences_only": [],
+                    "differences_count": 0,
+                    "level3_extension": {
+                        "status": "NOT_IMPLEMENTED",
+                        "reason": (
+                            "Level 3 structural/node-correspondence similarity requires a formal "
+                            "node alignment model for graph isomorphism, node insertions/deletions, "
+                            "and schedule reordering. Intentionally deferred as future research extension."
+                        ),
+                    },
+                }
+
+            structural_verification_dict = {
+                "level1": l1_res,
+                "level2": l2_res,
+                "reference_encoding": ref_enc_obj.to_dict(),
+                "suspicious_encoding": sus_enc_obj.to_dict() if sus_enc_obj else None,
+            }
+            ctx["structural_encoding_verification"] = structural_verification_dict
+            findings.append(
+                f"Structural Design Encoding: Level 1={l1_res['status']} ({l1_res.get('match_percentage_str', 'N/A')} match), "
+                f"Level 2 Component Agreement={l2_res['summary'].get('agreement_percentage_str', 'N/A')}."
+            )
+
         dispute_id = f"DISP-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         provenance_dict = {
@@ -781,6 +965,7 @@ class DisputeVerificationResultStage(PipelineStage):
                 "public_generator_g": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
                 "public_generator_h": "021ad06fad86cbbf99815a56f6c511152d048e5e0893d02c18194e3165a6aa4db3",
             },
+            "structural_encoding_verification": structural_verification_dict,
             "findings_summary": findings,
         }
 

@@ -100,6 +100,7 @@ class ProtectRequest(BaseModel):
     license_type: str
     k_tx: str
     watermark_length: Optional[Any] = "auto"
+    encoding_scope: Optional[List[int]] = None
 
 
 @app.post("/api/protect")
@@ -123,6 +124,7 @@ def protect_design(req: ProtectRequest):
         },
         "transaction_credentials": {"k_tx": req.k_tx},
         "watermark_length": req.watermark_length,
+        "encoding_scope": req.encoding_scope,
     }
 
     try:
@@ -195,6 +197,7 @@ def protect_design(req: ProtectRequest):
         },
         "original_verilog": prot_ctx["original_verilog"],
         "protected_verilog": prot_ctx["protected_verilog"],
+        "structural_encoding": prot_ctx.get("structural_encoding"),
         "protection_record": rec.model_dump(),
     }
 
@@ -460,6 +463,7 @@ def verify_dispute(req: DisputeRequest):
             "public_generator_g": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
             "public_generator_h": "021ad06fad86cbbf99815a56f6c511152d048e5e0893d02c18194e3165a6aa4db3",
         },
+        "structural_encoding_verification": res.structural_encoding_verification,
     }
 
 

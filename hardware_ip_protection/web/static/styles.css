@@ -968,3 +968,140 @@ canvas {
   border-color: var(--border-active);
   margin-bottom: 0.75rem;
 }
+
+/* =================================================================== */
+/* Structural Encoding & Level 2 Long Comparison UI                     */
+/* =================================================================== */
+
+.filter-btn-group {
+  display: inline-flex;
+  gap: 0.35rem;
+  background: rgba(14, 19, 31, 0.7);
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.btn-filter {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-filter:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn-filter.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary-light);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+/* Step Accordions for Large Level 2 Comparisons */
+.step-accordion {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: rgba(14, 19, 31, 0.5);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.step-accordion:hover {
+  border-color: var(--border-active);
+}
+
+.step-accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0.9rem;
+  background: rgba(14, 19, 31, 0.75);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.step-accordion-header:hover {
+  background: rgba(26, 36, 58, 0.7);
+}
+
+.step-accordion-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.step-accordion-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.step-accordion.open .step-accordion-arrow {
+  transform: rotate(90deg);
+  color: var(--accent-cyan);
+}
+
+.step-accordion-body {
+  display: none;
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(7, 9, 14, 0.6);
+}
+
+.step-accordion.open .step-accordion-body {
+  display: block;
+}
+
+/* Rule chips and difference highlights */
+.rule-chip {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.rule-match-chip {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--accent-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.rule-diff-box {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  padding: 0.25rem 0.45rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.rule-diff-ref {
+  color: var(--primary-light);
+}
+
+.rule-diff-sus {
+  color: var(--accent-rose);
+  font-weight: 700;
+}
+
+.status-differ {
+  color: var(--accent-rose);
+  font-weight: 700;
+}

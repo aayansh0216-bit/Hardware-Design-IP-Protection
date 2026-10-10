@@ -6,6 +6,12 @@ from .scheduler import ListScheduler, ScheduledDFG
 from .cig import CIG, ConstrainedCIG, WatermarkCIGMapper
 from .register_allocator import RegisterAllocator, RegisterAllocationResult
 from .rtl_generator import RTLGenerator
+from .structural_encoder import (
+    DesignStructuralEncoder,
+    StructuralEncodingResult,
+    NodeEncodingRecord,
+    StepEncodingGroup,
+)
 
 __all__ = [
     "DFG",
@@ -23,4 +29,9 @@ __all__ = [
     "RegisterAllocator",
     "RegisterAllocationResult",
     "RTLGenerator",
+    "DesignStructuralEncoder",
+    "StructuralEncodingResult",
+    "NodeEncodingRecord",
+    "StepEncodingGroup",
 ]
+
