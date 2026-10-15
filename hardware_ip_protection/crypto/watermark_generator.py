@@ -122,10 +122,16 @@ class SymmetricHKDFWatermarkGenerator(TransactionWatermarkGenerator):
     HKDF_SALT = b"Hardware_IP_Protection_Salt_2026"
 
     @staticmethod
-    def canonicalize_transaction_record(record: Dict[str, Any]) -> str:
+    def canonicalize_transaction_record(
+        record: Dict[str, Any],
+        D: Optional[str] = None,
+        B: Optional[str] = None,
+    ) -> str:
         """
         Validates and canonicalizes the transaction record schema:
             transaction_id, seller_id, buyer_id, design_hash, license_type
+        Cryptographically binds D (original design encoding) and B (buyer contribution)
+        when provided in record or as parameters.
         """
         required_fields = ["transaction_id", "seller_id", "buyer_id", "design_hash", "license_type"]
         for field in required_fields:
@@ -144,6 +150,17 @@ class SymmetricHKDFWatermarkGenerator(TransactionWatermarkGenerator):
             "design_hash": str(record["design_hash"]).strip().lower(),
             "license_type": license_type,
         }
+
+        # Cryptographically bind design encoding D if provided
+        d_val = D if D is not None else (record.get("design_encoding_D") or record.get("D"))
+        if d_val is not None:
+            canonical_data["design_encoding_D"] = str(d_val).strip()
+
+        # Cryptographically bind buyer contribution B if provided
+        b_val = B if B is not None else (record.get("buyer_contribution_B") or record.get("B") or record.get("buyer_bitstream_B"))
+        if b_val is not None:
+            canonical_data["buyer_contribution_B"] = str(b_val).strip()
+
         return json.dumps(canonical_data, sort_keys=True, separators=(",", ":"))
 
     def generate(
@@ -151,11 +168,13 @@ class SymmetricHKDFWatermarkGenerator(TransactionWatermarkGenerator):
         transaction_record: Dict[str, Any],
         transaction_credentials: Dict[str, Any],
         watermark_length: Optional[int] = 16,
+        D: Optional[str] = None,
+        B: Optional[str] = None,
     ) -> TransactionWatermark:
         if watermark_length is not None and watermark_length < 1:
             raise ValueError(f"Watermark length must be >= 1, got {watermark_length}")
 
-        canonical_tx_str = self.canonicalize_transaction_record(transaction_record)
+        canonical_tx_str = self.canonicalize_transaction_record(transaction_record, D=D, B=B)
 
         k_tx = transaction_credentials.get("k_tx")
         if not k_tx:

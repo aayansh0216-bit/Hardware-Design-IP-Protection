@@ -37,6 +37,7 @@ class ExtractionResult:
         unrecovered_bits: int = 16,
         reason: Optional[str] = None,
         recovered_bindings: Optional[Dict[str, str]] = None,
+        diagnostics: Optional[Dict[str, Any]] = None,
     ):
         self.status = status
         self.bitstream = bitstream
@@ -45,6 +46,7 @@ class ExtractionResult:
         self.unrecovered_bits = unrecovered_bits
         self.reason = reason
         self.recovered_bindings = recovered_bindings or {}
+        self.diagnostics = diagnostics or {}
 
     def to_dict(self) -> Dict[str, Any]:
         data = {
@@ -58,6 +60,8 @@ class ExtractionResult:
         if self.reason is not None:
             data["reason"] = self.reason
         data["binding_count"] = len(self.recovered_bindings)
+        if self.diagnostics:
+            data["diagnostics"] = self.diagnostics
         return data
 
 
@@ -174,6 +178,8 @@ class TransactionWatermarkExtractor:
         N = len(watermark_mapping)
         recovered_chars = []
         valid_count = 0
+        missing_count = 0
+        violation_count = 0
 
         for item in watermark_mapping:
             u, v = item["pair"]
@@ -185,13 +191,35 @@ class TransactionWatermarkExtractor:
             if not reg_u or not reg_v:
                 # Variable identity missing in RTL
                 recovered_chars.append("?")
+                missing_count += 1
             elif reg_u == reg_v:
                 # VIOLATION: Variables merged into same register! Constraint destroyed
                 recovered_chars.append("X")
+                violation_count += 1
             else:
                 # Non-sharing constraint structurally HOLDS in hardware register allocation
-                recovered_chars.append(bit_claimed)
-                valid_count += 1
+                # Verify that the variable pair parity matches the CIG encoding rule
+                u_m = re.search(r"\d+", str(u))
+                v_m = re.search(r"\d+", str(v))
+                if u_m and v_m:
+                    u_idx = int(u_m.group(0))
+                    v_idx = int(v_m.group(0))
+                    if u_idx % 2 == 0 and v_idx % 2 == 0:
+                        parity_bit = "0"
+                    elif u_idx % 2 == 1 and v_idx % 2 == 1:
+                        parity_bit = "1"
+                    else:
+                        parity_bit = None
+                else:
+                    parity_bit = None
+
+                # Prevent treating tampered claimed bits as valid
+                if parity_bit is not None and parity_bit != bit_claimed:
+                    recovered_chars.append("X")
+                    violation_count += 1
+                else:
+                    recovered_chars.append(bit_claimed)
+                    valid_count += 1
 
         recovered_bitstream = "".join(recovered_chars)
 
@@ -202,6 +230,14 @@ class TransactionWatermarkExtractor:
         else:
             status = ExtractionStatus.FAILED
 
+        diagnostics = {
+            "requested_bits": N,
+            "recovered_bits": valid_count,
+            "missing_variable_bits": missing_count,
+            "violated_or_mismatched_bits": violation_count,
+            "is_complete": (valid_count == N and "?" not in recovered_bitstream and "X" not in recovered_bitstream),
+        }
+
         return ExtractionResult(
             status=status,
             bitstream=recovered_bitstream,
@@ -210,4 +246,5 @@ class TransactionWatermarkExtractor:
             unrecovered_bits=N - valid_count,
             recovered_bindings=bindings,
             reason=None if status != ExtractionStatus.FAILED else "Insufficient structural constraints verified",
+            diagnostics=diagnostics,
         )

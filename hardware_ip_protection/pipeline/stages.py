@@ -180,6 +180,14 @@ class TransactionWatermarkGenerationStage(PipelineStage):
         tx_info["design_hash"] = ctx["design_hash"]
         credentials = ctx.get("transaction_credentials", {"k_tx": "default_key_v1"})
 
+        # Forward design encoding D and buyer contribution B if provided
+        d_val = ctx.get("design_encoding_D") or ctx.get("D") or tx_info.get("design_encoding_D") or tx_info.get("D")
+        b_val = ctx.get("buyer_contribution_B") or ctx.get("B") or tx_info.get("buyer_contribution_B") or tx_info.get("B") or tx_info.get("buyer_bitstream_B")
+        if d_val:
+            tx_info["design_encoding_D"] = d_val
+        if b_val:
+            tx_info["buyer_contribution_B"] = b_val
+
         # Determine watermark length (Section 8)
         cap_analysis = ctx["capacity_analysis"]
         req_length = ctx.get("watermark_length")
@@ -196,7 +204,7 @@ class TransactionWatermarkGenerationStage(PipelineStage):
         generator: TransactionWatermarkGenerator = ctx.get(
             "watermark_generator", SymmetricHKDFWatermarkGenerator()
         )
-        watermark = generator.generate(tx_info, credentials, watermark_length=watermark_length)
+        watermark = generator.generate(tx_info, credentials, watermark_length=watermark_length, D=d_val, B=b_val)
 
         ctx["watermark_length"] = watermark_length
         ctx["final_transaction_record"] = tx_info

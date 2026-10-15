@@ -279,3 +279,31 @@ def create_conv3x3() -> DFG:
         outputs=["conv_out"],
         nodes=nodes,
     )
+
+
+def create_iir_butterworth() -> DFG:
+    """
+    13-node, 7-control-step IIR Butterworth filter benchmark from 'design encoded data.docx'.
+    """
+    nodes = [
+        DFGNode(1, "mul", ["in1", "c1"], "t1"),
+        DFGNode(2, "mul", ["in2", "c2"], "t2"),
+        DFGNode(3, "mul", ["in3", "c3"], "t3"),
+        DFGNode(4, "mul", ["in4", "c4"], "t4"),
+        DFGNode(5, "mul", ["in5", "c5"], "t5"),
+        DFGNode(6, "mul", ["in6", "c6"], "t6"),
+        DFGNode(7, "mul", ["in7", "c7"], "t7"),
+        DFGNode(8, "add", ["t1", "t2"], "t8"),
+        DFGNode(9, "add", ["t8", "t3"], "t9"),
+        DFGNode(10, "add", ["t9", "t4"], "t10"),
+        DFGNode(11, "add", ["t10", "t5"], "t11"),
+        DFGNode(12, "add", ["t11", "t6"], "t12"),
+        DFGNode(13, "add", ["t12", "t7"], "out_bw"),
+    ]
+    return DFG(
+        name="iir_butterworth_filter",
+        inputs=[f"in{i}" for i in range(1, 8)] + [f"c{i}" for i in range(1, 8)],
+        outputs=["out_bw"],
+        nodes=nodes,
+    )
+

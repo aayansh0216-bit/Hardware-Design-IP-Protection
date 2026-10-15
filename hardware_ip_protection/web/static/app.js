@@ -3,16 +3,19 @@
 let currentProtectionData = null;
 let currentDisputeData = null;
 let benchmarksMap = {};
+let currentTransactionState = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     initTabs();
+    initTransactionWorkflow();
+    initVerifierWorkflow();
     initBenchmarks();
     initProtectForm();
     initDisputeForm();
     initAttackPresets();
 });
 
-// Tab Navigation
+// Tab & Profile Role Navigation
 function initTabs() {
     const tabBtns = document.querySelectorAll(".tab-btn");
     tabBtns.forEach(btn => {
@@ -22,7 +25,16 @@ function initTabs() {
 
             btn.classList.add("active");
             const targetId = btn.dataset.tab;
-            document.getElementById(targetId).classList.add("active");
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) targetEl.classList.add("active");
+
+            // Persist transaction state seamlessly across Seller, Buyer, and Verifier profiles
+            if (targetId === "profileSeller" || targetId === "profileBuyer") {
+                fetchTransactionState();
+            } else if (targetId === "profileVerifier") {
+                fetchTransactionState();
+                initOrRefreshVerifierProfile();
+            }
         });
     });
 
@@ -40,6 +52,617 @@ function initTabs() {
         });
     });
 }
+
+// ==============================================================================
+// TASK 1: Transaction State & Profile Workflow Orchestration
+// ==============================================================================
+
+async function fetchTransactionState() {
+    try {
+        const res = await fetch("/api/transaction/state");
+        if (res.ok) {
+            const data = await res.json();
+            currentTransactionState = data.state;
+            syncTransactionStateToUI(currentTransactionState);
+            return currentTransactionState;
+        }
+    } catch (e) {
+        console.warn("Failed to fetch transaction state:", e);
+    }
+    return null;
+}
+
+function initTransactionWorkflow() {
+    // Initial fetch of active transaction state
+    fetchTransactionState();
+
+    // Reset button
+    const btnReset = document.getElementById("btnResetWorkflow");
+    if (btnReset) {
+        btnReset.addEventListener("click", async () => {
+            if (confirm("Reset transaction state to initial configuration?")) {
+                try {
+                    const res = await fetch("/api/transaction/reset", { method: "POST" });
+                    if (res.ok) {
+                        const data = await res.json();
+                        currentTransactionState = data.state;
+                        syncTransactionStateToUI(currentTransactionState);
+                    }
+                } catch (err) {
+                    console.error("Failed to reset transaction:", err);
+                }
+            }
+        });
+    }
+
+    // STEP 2: Generate Original Design Encoding D & Commitment C_D
+    const btnEncodeD = document.getElementById("btnSellerEncodeD");
+    if (btnEncodeD) {
+        btnEncodeD.addEventListener("click", async () => {
+            btnEncodeD.disabled = true;
+            btnEncodeD.innerHTML = `<span>Generating Encoding D & Commit(D)...</span>`;
+            try {
+                const res = await fetch("/api/transaction/encode_design", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ use_table_quirks: false }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Encoding failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to encode design:", err);
+                alert("Network error generating design encoding D.");
+            } finally {
+                btnEncodeD.disabled = false;
+                btnEncodeD.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                    </svg>
+                    <span>Generate Original Design Encoding D</span>`;
+            }
+        });
+    }
+
+    // STEP 3: Request Buyer Contribution
+    const btnReqBuyer = document.getElementById("btnSellerRequestBuyer");
+    if (btnReqBuyer) {
+        btnReqBuyer.addEventListener("click", async () => {
+            btnReqBuyer.disabled = true;
+            btnReqBuyer.innerHTML = `<span>Dispatching Request...</span>`;
+            try {
+                const res = await fetch("/api/transaction/request_buyer", { method: "POST" });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Request failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to request buyer contribution:", err);
+                alert("Network error requesting buyer contribution.");
+            } finally {
+                btnReqBuyer.disabled = false;
+                btnReqBuyer.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                    </svg>
+                    <span>Request Buyer Contribution</span>`;
+            }
+        });
+    }
+
+    // BUYER: Approve Request & Provide 555-bit Contribution B
+    const btnBuyerApprove = document.getElementById("btnBuyerApproveRequest");
+    if (btnBuyerApprove) {
+        btnBuyerApprove.addEventListener("click", async () => {
+            btnBuyerApprove.disabled = true;
+            btnBuyerApprove.innerHTML = `<span>Approving & Committing B (555 bits)...</span>`;
+            try {
+                const res = await fetch("/api/transaction/approve_buyer", { method: "POST" });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Approval failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to approve request:", err);
+                alert("Network error approving contribution request.");
+            } finally {
+                btnBuyerApprove.disabled = false;
+                btnBuyerApprove.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span>Approve Request & Submit Contribution B</span>`;
+            }
+        });
+    }
+
+    // BUYER: Reject Request
+    const btnBuyerReject = document.getElementById("btnBuyerRejectRequest");
+    if (btnBuyerReject) {
+        btnBuyerReject.addEventListener("click", async () => {
+            if (confirm("Reject contribution request from Seller?")) {
+                btnBuyerReject.disabled = true;
+                try {
+                    const res = await fetch("/api/transaction/reject_buyer", { method: "POST" });
+                    if (res.ok) {
+                        const data = await res.json();
+                        currentTransactionState = data.state;
+                        syncTransactionStateToUI(currentTransactionState);
+                    } else {
+                        const err = await res.json();
+                        alert(`Rejection failed: ${err.detail || "Server error"}`);
+                    }
+                } catch (err) {
+                    console.error("Failed to reject request:", err);
+                    alert("Network error rejecting request.");
+                } finally {
+                    btnBuyerReject.disabled = false;
+                }
+            }
+        });
+    }
+
+    // Buyer Transaction Details Sub-Tabs (Overview, Commitments, Private Evidence)
+    const buyerSubtabBtns = document.querySelectorAll(".buyer-nav-btn");
+    buyerSubtabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            buyerSubtabBtns.forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".buyer-tab-pane").forEach(p => p.classList.remove("active"));
+
+            btn.classList.add("active");
+            const target = btn.dataset.buyerTab;
+            const targetEl = document.getElementById(target);
+            if (targetEl) targetEl.classList.add("active");
+        });
+    });
+
+    // STEP 4: Continue Watermark Workflow
+    const btnContinueWm = document.getElementById("btnSellerContinueWatermark");
+    if (btnContinueWm) {
+        btnContinueWm.addEventListener("click", async () => {
+            btnContinueWm.disabled = true;
+            btnContinueWm.innerHTML = `<span>Embedding Watermark into RTL...</span>`;
+            try {
+                const res = await fetch("/api/transaction/continue_watermark", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        transaction_id: "TX-001",
+                        seller_id: "SELLER-001",
+                        buyer_id: "BUYER-001",
+                        license_type: "exclusive",
+                        k_tx: "K_tx_symmetric_credential_secret_777",
+                        watermark_length: "auto",
+                    }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                    if (data.state.pipeline_result) {
+                        currentProtectionData = data.state.pipeline_result;
+                        renderProtectionResults(data.state.pipeline_result);
+                        syncToDisputeTab(data.state.pipeline_result);
+                    }
+                } else {
+                    const err = await res.json();
+                    alert(`Watermark embedding failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to continue watermark workflow:", err);
+                alert("Network error executing watermark workflow.");
+            } finally {
+                btnContinueWm.disabled = false;
+                btnContinueWm.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <span>Continue Existing Watermark Workflow</span>`;
+            }
+        });
+    }
+}
+
+function syncTransactionStateToUI(st) {
+    if (!st) return;
+
+    // --- SELLER TRANSACTION CARD ---
+    const sellerTxReqBadge = document.getElementById("sellerTxReqBadge");
+    const sellerTxContribBadge = document.getElementById("sellerTxContribBadge");
+    const sellerTxCommitBadge = document.getElementById("sellerTxCommitBadge");
+    const sellerTxDetailsLockBadge = document.getElementById("sellerTxDetailsLockBadge");
+
+    if (sellerTxReqBadge) {
+        sellerTxReqBadge.textContent = st.buyer_request_status || "Not Requested";
+        if (st.buyer_request_status === "Approved") sellerTxReqBadge.className = "badge badge-success";
+        else if (st.buyer_request_status === "Rejected") sellerTxReqBadge.className = "badge badge-danger";
+        else if (st.buyer_request_status.includes("Pending")) sellerTxReqBadge.className = "badge badge-warning pulse-amber";
+        else sellerTxReqBadge.className = "badge badge-v1";
+    }
+    if (sellerTxContribBadge) {
+        sellerTxContribBadge.textContent = st.buyer_contribution_status || (st.buyer_approved ? "Received" : "Not Received");
+        sellerTxContribBadge.className = st.buyer_approved ? "badge badge-success" : "badge badge-v1";
+    }
+    if (sellerTxCommitBadge) {
+        sellerTxCommitBadge.textContent = st.buyer_commitment_status || (st.C_B ? "Generated" : "Not Generated");
+        sellerTxCommitBadge.className = st.C_B ? "badge badge-success" : "badge badge-v1";
+    }
+    if (sellerTxDetailsLockBadge) {
+        if (st.buyer_approved) {
+            sellerTxDetailsLockBadge.textContent = "Available";
+            sellerTxDetailsLockBadge.className = "badge badge-success";
+        } else {
+            sellerTxDetailsLockBadge.textContent = "Locked until approval";
+            sellerTxDetailsLockBadge.className = "badge badge-warning";
+        }
+    }
+
+    // --- SELLER UI WORKFLOW STEPS ---
+    const sDes = document.getElementById("sellerDesignSelect");
+    if (sDes) sDes.value = st.design_id || "iir_butterworth";
+    const sRul = document.getElementById("sellerRuleSelect");
+    if (sRul) sRul.value = st.encoding_rule_id || "iir_butterworth_rule_v1";
+
+    const badgeStep2 = document.getElementById("badgeStep2");
+    const sellerSummaryBox = document.getElementById("sellerEncodingSummaryBox");
+    const sellerDLength = document.getElementById("sellerDLength");
+    const sellerCD = document.getElementById("sellerCommitmentCD");
+    const btnReqBuyer = document.getElementById("btnSellerRequestBuyer");
+
+    if (st.design_encoding_D) {
+        if (badgeStep2) {
+            badgeStep2.textContent = `Generated (${st.design_encoding_D.length} bits)`;
+            badgeStep2.className = "badge badge-success";
+        }
+        if (sellerSummaryBox) sellerSummaryBox.style.display = "block";
+        if (sellerDLength) sellerDLength.textContent = `${st.design_encoding_D.length} bits`;
+        if (sellerCD) sellerCD.textContent = st.C_D || "--";
+        if (btnReqBuyer && st.buyer_request_status === "Not Requested") {
+            btnReqBuyer.disabled = false;
+        }
+
+        if (st.design_encoding_details) {
+            renderStructuralEncodingTab1(st.design_encoding_details);
+            const resultsArea = document.getElementById("protectionResults");
+            if (resultsArea && resultsArea.style.display === "none" && !st.watermark_W) {
+                resultsArea.style.display = "block";
+                const encTabBtn = document.querySelector('[data-view="viewStructuralEncoding"]');
+                if (encTabBtn) encTabBtn.click();
+            }
+        }
+    } else {
+        if (badgeStep2) {
+            badgeStep2.textContent = "Ready to Generate";
+            badgeStep2.className = "badge badge-warning";
+        }
+        if (sellerSummaryBox) sellerSummaryBox.style.display = "none";
+        if (btnReqBuyer) btnReqBuyer.disabled = true;
+    }
+
+    const sellerBuyerStatusBadge = document.getElementById("sellerBuyerStatusBadge");
+    const sellerPendingNotice = document.getElementById("sellerPendingNotice");
+    const sellerBuyerApprovedBox = document.getElementById("sellerBuyerApprovedBox");
+    const sellerCB = document.getElementById("sellerCommitmentCB");
+    const buyerNavPendingBadge = document.getElementById("buyerNavPendingBadge");
+
+    const isPending = st.buyer_request_status && st.buyer_request_status.includes("Pending") && !st.buyer_approved && !st.buyer_rejected;
+
+    if (sellerBuyerStatusBadge) {
+        if (st.buyer_request_status === "Not Requested") {
+            sellerBuyerStatusBadge.textContent = "Not Requested";
+            sellerBuyerStatusBadge.className = "badge badge-v1";
+        } else if (isPending) {
+            sellerBuyerStatusBadge.textContent = "Pending Buyer Approval";
+            sellerBuyerStatusBadge.className = "badge badge-warning pulse-amber";
+        } else if (st.buyer_request_status === "Approved") {
+            sellerBuyerStatusBadge.textContent = "Approved & Received";
+            sellerBuyerStatusBadge.className = "badge badge-success";
+        } else if (st.buyer_request_status === "Rejected") {
+            sellerBuyerStatusBadge.textContent = "Rejected by Buyer";
+            sellerBuyerStatusBadge.className = "badge badge-danger";
+        }
+    }
+
+    if (sellerPendingNotice) {
+        sellerPendingNotice.style.display = isPending ? "block" : "none";
+    }
+
+    if (buyerNavPendingBadge) {
+        buyerNavPendingBadge.style.display = isPending ? "inline-block" : "none";
+    }
+
+    if (sellerBuyerApprovedBox) {
+        sellerBuyerApprovedBox.style.display = st.buyer_approved ? "block" : "none";
+        if (sellerCB) sellerCB.textContent = st.C_B || "--";
+    }
+
+    if (btnReqBuyer) {
+        btnReqBuyer.disabled = (st.buyer_request_status !== "Not Requested" || !st.design_encoding_D);
+    }
+
+    const btnContinueWm = document.getElementById("btnSellerContinueWatermark");
+    const sellerStep4Badge = document.getElementById("sellerStep4Badge");
+
+    if (btnContinueWm) {
+        btnContinueWm.disabled = !st.buyer_approved;
+    }
+
+    if (sellerStep4Badge) {
+        if (st.watermark_W) {
+            sellerStep4Badge.textContent = "Protected & Embedded";
+            sellerStep4Badge.className = "badge badge-success";
+        } else if (st.buyer_approved) {
+            sellerStep4Badge.textContent = "Ready to Embed";
+            sellerStep4Badge.className = "badge badge-warning";
+        } else {
+            sellerStep4Badge.textContent = "Awaiting Buyer";
+            sellerStep4Badge.className = "badge badge-v1";
+        }
+    }
+
+    if (st.pipeline_result && st.watermark_W) {
+        renderProtectionResults(st.pipeline_result);
+    }
+
+    // --- AUDITED COMMITMENTS VIEW (SELLER PROFILE) ---
+    const commCdHex = document.getElementById("commCdHex");
+    const badgeCdStatus = document.getElementById("badgeCdStatus");
+    if (commCdHex && st.C_D) {
+        commCdHex.textContent = st.C_D;
+        if (badgeCdStatus) {
+            badgeCdStatus.textContent = "Stored / Generated";
+            badgeCdStatus.className = "badge badge-success";
+        }
+    }
+
+    const commWmHex = document.getElementById("commWmHex");
+    const badgeCwStatus = document.getElementById("badgeCwStatus");
+    if (commWmHex && st.C_W) {
+        commWmHex.textContent = st.C_W;
+        if (badgeCwStatus) {
+            badgeCwStatus.textContent = "Stored / Generated";
+            badgeCwStatus.className = "badge badge-success";
+        }
+    }
+
+    const commCw1Hex = document.getElementById("commCw1Hex");
+    const badgeCw1Status = document.getElementById("badgeCw1Status");
+    if (commCw1Hex && st.C_W1) {
+        commCw1Hex.textContent = st.C_W1;
+        if (badgeCw1Status) {
+            badgeCw1Status.textContent = "Stored / Generated";
+            badgeCw1Status.className = "badge badge-success";
+        }
+    }
+
+    const commTvHex = document.getElementById("commTvHex");
+    const badgeCvStatus = document.getElementById("badgeCvStatus");
+    if (commTvHex && (st.C_V || (st.pipeline_result && st.pipeline_result.test_vectors))) {
+        commTvHex.textContent = st.C_V || st.pipeline_result.test_vectors.commitment_hex;
+        if (badgeCvStatus) {
+            badgeCvStatus.textContent = "Stored / Generated";
+            badgeCvStatus.className = "badge badge-info";
+        }
+    }
+
+    // --- SELLER PRIVATE EVIDENCE VIEW (Stage 1 & Stage 2) ---
+    const sellerPrivCanonicalD = document.getElementById("sellerPrivCanonicalD");
+    if (sellerPrivCanonicalD) {
+        sellerPrivCanonicalD.textContent = st.design_encoding_D || "Not generated yet.";
+    }
+    const sellerPrivStoredCd = document.getElementById("sellerPrivStoredCd");
+    if (sellerPrivStoredCd) {
+        sellerPrivStoredCd.textContent = st.C_D || "--";
+    }
+    const sellerEvidCdStatus = document.getElementById("sellerEvidCdStatus");
+    if (sellerEvidCdStatus) {
+        if (st.C_D) {
+            sellerEvidCdStatus.textContent = "Generated / Stored";
+            sellerEvidCdStatus.className = "badge badge-success";
+        } else {
+            sellerEvidCdStatus.textContent = "Not generated yet";
+            sellerEvidCdStatus.className = "badge badge-v1";
+        }
+    }
+
+    const sellerPrivBlindingD = document.getElementById("sellerPrivBlindingD");
+    if (sellerPrivBlindingD) {
+        sellerPrivBlindingD.textContent = st.blinding_factor_D ? `0x${st.blinding_factor_D}` : "Not generated yet.";
+    }
+    const sellerPrivBlindingW = document.getElementById("sellerPrivBlindingW");
+    if (sellerPrivBlindingW) {
+        sellerPrivBlindingW.textContent = st.blinding_factor_W ? `0x${st.blinding_factor_W}` : "Not generated yet.";
+    }
+    const sellerPrivBlindingW1 = document.getElementById("sellerPrivBlindingW1");
+    if (sellerPrivBlindingW1) {
+        sellerPrivBlindingW1.textContent = st.blinding_factor_W1 ? `0x${st.blinding_factor_W1}` : "Not generated yet.";
+    }
+    const sellerPrivCanonicalW = document.getElementById("sellerPrivCanonicalW");
+    if (sellerPrivCanonicalW) {
+        sellerPrivCanonicalW.textContent = st.watermark_W || "Not generated yet.";
+    }
+    const sellerPrivStoredCw = document.getElementById("sellerPrivStoredCw");
+    if (sellerPrivStoredCw) {
+        sellerPrivStoredCw.textContent = st.C_W || "--";
+    }
+    const sellerEvidCwStatus = document.getElementById("sellerEvidCwStatus");
+    if (sellerEvidCwStatus) {
+        if (st.C_W) {
+            sellerEvidCwStatus.textContent = "Generated / Stored";
+            sellerEvidCwStatus.className = "badge badge-success";
+        } else {
+            sellerEvidCwStatus.textContent = "Not generated yet";
+            sellerEvidCwStatus.className = "badge badge-v1";
+        }
+    }
+
+    const sellerPrivW1 = document.getElementById("sellerPrivW1");
+    if (sellerPrivW1) {
+        sellerPrivW1.textContent = st.W1 ? `${st.W1} (${st.W1.length} bits)` : "Not generated yet.";
+    }
+    const sellerPrivW2 = document.getElementById("sellerPrivW2");
+    if (sellerPrivW2) {
+        sellerPrivW2.textContent = st.protected_W2 ? `${st.protected_W2} (${st.protected_W2.length} bits)` : "Not generated yet.";
+    }
+    const sellerPrivStoredCw1 = document.getElementById("sellerPrivStoredCw1");
+    if (sellerPrivStoredCw1) {
+        sellerPrivStoredCw1.textContent = st.C_W1 || "--";
+    }
+    const sellerEvidCw1Status = document.getElementById("sellerEvidCw1Status");
+    if (sellerEvidCw1Status) {
+        if (st.C_W1) {
+            sellerEvidCw1Status.textContent = "Generated / Stored";
+            sellerEvidCw1Status.className = "badge badge-success";
+        } else {
+            sellerEvidCw1Status.textContent = "Not generated yet";
+            sellerEvidCw1Status.className = "badge badge-v1";
+        }
+    }
+
+    // --- BUYER UI UPDATES ---
+    const buyerStateBadgeTop = document.getElementById("buyerStateBadgeTop");
+    const buyerTxReqBadge = document.getElementById("buyerTxReqBadge");
+    const buyerTxContribBadge = document.getElementById("buyerTxContribBadge");
+    const buyerTxCommitBadge = document.getElementById("buyerTxCommitBadge");
+    const buyerTxDetailsLockBadge = document.getElementById("buyerTxDetailsLockBadge");
+
+    if (buyerStateBadgeTop) {
+        if (st.buyer_approved) {
+            buyerStateBadgeTop.textContent = "Contribution Approved";
+            buyerStateBadgeTop.className = "badge badge-success";
+        } else if (st.buyer_rejected) {
+            buyerStateBadgeTop.textContent = "Request Rejected";
+            buyerStateBadgeTop.className = "badge badge-danger";
+        } else if (isPending) {
+            buyerStateBadgeTop.textContent = "Approval Pending";
+            buyerStateBadgeTop.className = "badge badge-warning pulse-amber";
+        } else {
+            buyerStateBadgeTop.textContent = "Idle";
+            buyerStateBadgeTop.className = "badge badge-v1";
+        }
+    }
+
+    if (buyerTxReqBadge) {
+        buyerTxReqBadge.textContent = st.buyer_request_status || "Not Requested";
+        if (st.buyer_request_status === "Approved") buyerTxReqBadge.className = "badge badge-success";
+        else if (st.buyer_rejected) buyerTxReqBadge.className = "badge badge-danger";
+        else if (isPending) buyerTxReqBadge.className = "badge badge-warning pulse-amber";
+        else buyerTxReqBadge.className = "badge badge-v1";
+    }
+    if (buyerTxContribBadge) {
+        buyerTxContribBadge.textContent = st.buyer_contribution_status || (st.buyer_approved ? "Received" : "Not Received");
+        buyerTxContribBadge.className = st.buyer_approved ? "badge badge-success" : "badge badge-v1";
+    }
+    if (buyerTxCommitBadge) {
+        buyerTxCommitBadge.textContent = st.buyer_commitment_status || (st.C_B ? "Generated" : "Not Generated");
+        buyerTxCommitBadge.className = st.C_B ? "badge badge-success" : "badge badge-v1";
+    }
+    if (buyerTxDetailsLockBadge) {
+        if (st.buyer_approved) {
+            buyerTxDetailsLockBadge.textContent = "Available";
+            buyerTxDetailsLockBadge.className = "badge badge-success";
+        } else {
+            buyerTxDetailsLockBadge.textContent = "Locked until approval";
+            buyerTxDetailsLockBadge.className = "badge badge-warning";
+        }
+    }
+
+    const buyerNoRequestView = document.getElementById("buyerNoRequestView");
+    const buyerRequestActiveView = document.getElementById("buyerRequestActiveView");
+    const buyerRejectedView = document.getElementById("buyerRejectedView");
+    const buyerTransactionDetailsCard = document.getElementById("buyerTransactionDetailsCard");
+
+    const buyerSellerCDDisplay = document.getElementById("buyerSellerCDDisplay");
+    const buyerMetricTotalBits = document.getElementById("buyerMetricTotalBits");
+    const buyerMetricZeros = document.getElementById("buyerMetricZeros");
+    const buyerMetricOnes = document.getElementById("buyerMetricOnes");
+    const buyerCommitmentCBDisplay = document.getElementById("buyerCommitmentCBDisplay");
+    const buyerBitstreamBox = document.getElementById("buyerBitstreamBox");
+
+    const buyerOverviewWmStatus = document.getElementById("buyerOverviewWmStatus");
+    const buyerDetailsCbHex = document.getElementById("buyerDetailsCbHex");
+    const buyerPrivateBlindingDisplay = document.getElementById("buyerPrivateBlindingDisplay");
+    const buyerPrivateBitstreamBox = document.getElementById("buyerPrivateBitstreamBox");
+
+    if (st.buyer_request_status === "Not Requested") {
+        if (buyerNoRequestView) buyerNoRequestView.style.display = "block";
+        if (buyerRequestActiveView) buyerRequestActiveView.style.display = "none";
+        if (buyerRejectedView) buyerRejectedView.style.display = "none";
+        if (buyerTransactionDetailsCard) buyerTransactionDetailsCard.style.display = "none";
+    } else if (st.buyer_rejected) {
+        if (buyerNoRequestView) buyerNoRequestView.style.display = "none";
+        if (buyerRequestActiveView) buyerRequestActiveView.style.display = "none";
+        if (buyerRejectedView) buyerRejectedView.style.display = "block";
+        if (buyerTransactionDetailsCard) buyerTransactionDetailsCard.style.display = "none";
+    } else if (isPending) {
+        if (buyerNoRequestView) buyerNoRequestView.style.display = "none";
+        if (buyerRequestActiveView) buyerRequestActiveView.style.display = "block";
+        if (buyerRejectedView) buyerRejectedView.style.display = "none";
+        if (buyerTransactionDetailsCard) buyerTransactionDetailsCard.style.display = "none";
+
+        if (buyerSellerCDDisplay) buyerSellerCDDisplay.textContent = st.C_D || "--";
+
+        // Dynamic 555-bit metrics
+        const totalLen = st.buyer_bitstream_length || 555;
+        const zeros = st.buyer_zeros_count !== null && st.buyer_zeros_count !== undefined ? st.buyer_zeros_count : 242;
+        const ones = st.buyer_ones_count !== null && st.buyer_ones_count !== undefined ? st.buyer_ones_count : 313;
+        if (buyerMetricTotalBits) buyerMetricTotalBits.textContent = `${totalLen} bits`;
+        if (buyerMetricZeros) buyerMetricZeros.textContent = `${zeros} (${((zeros/totalLen)*100).toFixed(1)}%)`;
+        if (buyerMetricOnes) buyerMetricOnes.textContent = `${ones} (${((ones/totalLen)*100).toFixed(1)}%)`;
+
+        if (buyerCommitmentCBDisplay) buyerCommitmentCBDisplay.textContent = st.C_B || "--";
+        if (buyerBitstreamBox) buyerBitstreamBox.textContent = st.buyer_bitstream_B || "--";
+    } else if (st.buyer_approved) {
+        if (buyerNoRequestView) buyerNoRequestView.style.display = "none";
+        if (buyerRequestActiveView) buyerRequestActiveView.style.display = "none";
+        if (buyerRejectedView) buyerRejectedView.style.display = "none";
+        if (buyerTransactionDetailsCard) buyerTransactionDetailsCard.style.display = "block";
+
+        if (buyerOverviewWmStatus) {
+            if (st.watermark_W) {
+                buyerOverviewWmStatus.textContent = "Embedded & Protected in RTL";
+                buyerOverviewWmStatus.className = "metric-val status-match";
+            } else {
+                buyerOverviewWmStatus.textContent = "Awaiting Seller Embedding";
+                buyerOverviewWmStatus.className = "metric-val status-warning";
+            }
+        }
+
+        if (buyerDetailsCbHex) buyerDetailsCbHex.textContent = st.C_B || "--";
+        const buyerEvidStoredCb = document.getElementById("buyerEvidStoredCb");
+        if (buyerEvidStoredCb) buyerEvidStoredCb.textContent = st.C_B || "--";
+        const buyerEvidCbStatus = document.getElementById("buyerEvidCbStatus");
+        if (buyerEvidCbStatus) {
+            if (st.C_B) {
+                buyerEvidCbStatus.textContent = "Generated / Stored";
+                buyerEvidCbStatus.className = "badge badge-success";
+            } else {
+                buyerEvidCbStatus.textContent = "Not generated yet";
+                buyerEvidCbStatus.className = "badge badge-v1";
+            }
+        }
+        if (buyerPrivateBlindingDisplay) {
+            buyerPrivateBlindingDisplay.textContent = st.blinding_factor_B ? `0x${st.blinding_factor_B}` : "--";
+        }
+        if (buyerPrivateBitstreamBox) {
+            buyerPrivateBitstreamBox.textContent = st.buyer_bitstream_B || "--";
+        }
+    }
+}
+
 
 // Load benchmarks and cache capacity metadata
 async function initBenchmarks() {
@@ -289,12 +912,14 @@ function renderProtectionResults(data) {
     extStatus.className = `metric-val status-${data.reference_watermark_extraction.status.toLowerCase()}`;
 
     const wmComm = document.getElementById("metricWmCommitment");
-    wmComm.textContent = "VALID (P-256)";
-    wmComm.className = "metric-val status-valid";
+    if (wmComm) {
+        wmComm.textContent = "STORED (P-256)";
+        wmComm.className = "metric-val status-match";
+    }
 
     const wmLen = document.getElementById("metricWmLength");
     if (wmLen) {
-        wmLen.textContent = `${totalWmBits} bits`;
+        wmLen.textContent = `${totalWmBits} bits (W1) / 256b (W)`;
     }
 
     const regCount = document.getElementById("metricRegs");
@@ -1573,6 +2198,610 @@ function drawHeatmap(canvasId, signals, matrix, mode) {
             const tooltip = document.getElementById("heatmapTooltip");
             if (tooltip) tooltip.style.display = "none";
         });
+    }
+}
+
+// ==============================================================================
+// VERIFIER PROFILE & STEP-BY-STEP DISPUTE ADJUDICATION WORKFLOW
+// ==============================================================================
+
+let currentVerifierSession = null;
+let currentVerifierStep = 1;
+
+const VERIFIER_STEPS_META = [
+    {
+        num: 1,
+        title: "Step 1: Obtain Disputed RTL",
+        party: "Dispute Submitter / Transaction Registry",
+        desc: "Load the disputed synthesizable Verilog RTL associated with transaction TX-001.",
+        defaultMethod: "Acquire synthesized RTL artifact bound to the selected transaction",
+        defaultInput: "Transaction TX-001 synthesizable Verilog RTL source"
+    },
+    {
+        num: 2,
+        title: "Step 2: Extract Secured Encoding (E_S')",
+        party: "Seller / Verifier Execution",
+        desc: "Apply the 4-rule deterministic structural encoding for IIR Butterworth filter to extract E_S' (143 bits).",
+        defaultMethod: "4-Rule Deterministic Structural Encoding (Parity, Node ID, Op Type, Step Count)",
+        defaultInput: "Disputed RTL & Scheduled DFG (13 nodes, 7 control steps)"
+    },
+    {
+        num: 3,
+        title: "Step 3: Evaluate Encoding Invariance (E_S vs D)",
+        party: "Verifier Analysis",
+        desc: "Determine whether the watermarked encoding E_S' changed relative to baseline D. Branch A: E_S = D (C_ES not required); Branch B: E_S != D.",
+        defaultMethod: "Bitwise comparison of extracted E_S' against baseline original design encoding D",
+        defaultInput: "E_S' (143 bits) and D (143 bits)"
+    },
+    {
+        num: 4,
+        title: "Step 4: Verify Original Design Encoding (C_D)",
+        party: "Seller",
+        desc: "Independently calculate D' (143 bits) from golden benchmark rules and verify commitment C_D' == C_D over NIST P-256.",
+        defaultMethod: "Execute deterministic structural encoder for IIR Butterworth Filter (Rule 1-4)",
+        defaultInput: "Golden IIR Butterworth filter benchmark specification"
+    },
+    {
+        num: 5,
+        title: "Step 5: Extract Embedded Watermark (W1')",
+        party: "Seller Rules / Verifier RTL Extraction",
+        desc: "Inspect synthesized RTL register bindings for target CIG pairs and recover embedded 32-bit watermark W1'.",
+        defaultMethod: "Parse synthesized RTL register allocations; inspect mutual exclusion across target CIG pairs",
+        defaultInput: "Synthesizable Verilog RTL source and target variable pair mapping"
+    },
+    {
+        num: 6,
+        title: "Step 6: Verify Embedded Watermark Commitment (C_W1)",
+        party: "Seller",
+        desc: "Recalculate C_W1' = Commit(W1', r_W1) and verify equality with stored C_W1 over NIST P-256.",
+        defaultMethod: "Value is extracted 32-bit watermark slice W1' from Step 5",
+        defaultInput: "W1' (32 bits)"
+    },
+    {
+        num: 7,
+        title: "Step 7: Reconstruct Complete Watermark (W')",
+        party: "Seller Private Evidence",
+        desc: "Combine extracted W1' (32 bits) and protected slice W2 (224 bits) to reconstruct complete 256-bit watermark W'.",
+        defaultMethod: "Watermark reconstruction rule: W = W1 || W2 (Concatenation)",
+        defaultInput: "Extracted W1' (32 bits) and protected off-chain W2 (224 bits)"
+    },
+    {
+        num: 8,
+        title: "Step 8: Verify Complete Watermark Commitment (C_W)",
+        party: "Seller",
+        desc: "Recalculate C_W' = Commit(W', r_W) and verify equality with stored commitment C_W over NIST P-256.",
+        defaultMethod: "Value is reconstructed 256-bit complete watermark W' from Step 7",
+        defaultInput: "W' (256 bits)"
+    },
+    {
+        num: 9,
+        title: "Step 9: Check Buyer Contribution Bitstream (B')",
+        party: "Buyer Private Evidence",
+        desc: "Load and validate Buyer demonstration bitstream B' (555 bits: 242 zeros, 313 ones). One-way derivation prevents inverting B from W.",
+        defaultMethod: "Fingerprint-Derived Bitstream Extraction (fingerprint_minutiae_demo_standard)",
+        defaultInput: "Demonstration minutiae coordinate extraction template"
+    },
+    {
+        num: 10,
+        title: "Step 10: Verify Buyer Commitment (C_B)",
+        party: "Buyer",
+        desc: "Recalculate C_B' = Commit(B', r_B) and verify equality with stored commitment C_B. Commitment C_B belongs strictly to Buyer profile.",
+        defaultMethod: "Value is validated 555-bit Buyer demonstration bitstream B' from Step 9",
+        defaultInput: "B' (555 bits)"
+    },
+    {
+        num: 11,
+        title: "Step 11: Verify Watermark-Generation Relationship F",
+        party: "Verifier Independent Computation",
+        desc: "Verify canonical transaction relationship W' == F(D', B', context, k_tx) using RFC 5869 Symmetric HKDF-SHA256.",
+        defaultMethod: "RFC 5869 Symmetric HKDF-SHA256 (Extract-and-Expand) over canonical transaction record",
+        defaultInput: "Transaction metadata record, credential key k_tx, design hash"
+    },
+    {
+        num: 12,
+        title: "Step 12: Verify Transaction Evidence & Recorded Rights",
+        party: "Transaction State Record",
+        desc: "Audit transaction authorizations and distinguish cryptographic consistency from recorded rights (exclusive license vs ownership).",
+        defaultMethod: "Inspect recorded transaction parameters, parties, approvals, and license terms",
+        defaultInput: "Transaction TX-001 audit ledger and authorization states"
+    },
+    {
+        num: 13,
+        title: "Step 13: Generate Final Dispute Report",
+        party: "Independent Dispute Adjudication Authority",
+        desc: "Compile structured dispute adjudication report and overall evidence consistency status.",
+        defaultMethod: "Synthesize verification outcomes across design, watermarks, buyer bitstream, and transaction terms",
+        defaultInput: "Independent verification outcomes from Steps 1 through 12"
+    }
+];
+
+const DISPUTE_SUBCATEGORIES_MAP = {
+    "Seller ↔ Buyer Conflict": [
+        "Buyer claims ownership; Seller disputes the transaction.",
+        "Buyer claims a transaction; Seller disputes authorization.",
+        "Buyer claims ownership; recorded transaction may grant only a license."
+    ],
+    "Reference Design ↔ Suspicious Design": [
+        "Exact or near-copy suspicion.",
+        "Modified design.",
+        "Possible unauthorized reuse."
+    ]
+};
+
+function initVerifierWorkflow() {
+    const disputeTypeSelect = document.getElementById("verifierDisputeType");
+    const subcategorySelect = document.getElementById("verifierDisputeSubcategory");
+
+    if (disputeTypeSelect && subcategorySelect) {
+        disputeTypeSelect.addEventListener("change", () => {
+            const selectedType = disputeTypeSelect.value;
+            const subcats = DISPUTE_SUBCATEGORIES_MAP[selectedType] || [];
+            subcategorySelect.innerHTML = "";
+            subcats.forEach(s => {
+                const opt = document.createElement("option");
+                opt.value = s;
+                opt.textContent = s;
+                subcategorySelect.appendChild(opt);
+            });
+
+            // Toggle workspaces depending on dispute category
+            const sbWorkspace = document.getElementById("verifierSellerBuyerWorkspace");
+            const refSusWorkspace = document.getElementById("verifierRefSusWorkspace");
+            const tabDisputeEl = document.getElementById("tabDispute");
+
+            if (selectedType === "Reference Design ↔ Suspicious Design") {
+                if (sbWorkspace) sbWorkspace.style.display = "none";
+                if (refSusWorkspace) refSusWorkspace.style.display = "block";
+                if (tabDisputeEl) tabDisputeEl.style.display = "block";
+            } else {
+                if (refSusWorkspace) refSusWorkspace.style.display = "none";
+                if (tabDisputeEl) tabDisputeEl.style.display = "none";
+                if (currentVerifierSession && currentVerifierSession.step_results) {
+                    if (sbWorkspace) sbWorkspace.style.display = "block";
+                }
+            }
+        });
+    }
+
+    // Initialize Guided Dispute Workspace button
+    const btnInit = document.getElementById("btnInitDispute");
+    if (btnInit) {
+        btnInit.addEventListener("click", async () => {
+            const txSelect = document.getElementById("verifierTxSelect");
+            const txId = txSelect ? txSelect.value : "TX-001";
+            const dispType = disputeTypeSelect ? disputeTypeSelect.value : "Seller ↔ Buyer Conflict";
+            const subcat = subcategorySelect ? subcategorySelect.value : null;
+
+            try {
+                const res = await fetch("/api/verifier/configure_dispute", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        transaction_id: txId,
+                        dispute_type: dispType,
+                        dispute_subcategory: subcat
+                    })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    currentVerifierSession = data.session;
+                    currentVerifierStep = 1;
+
+                    const sbWorkspace = document.getElementById("verifierSellerBuyerWorkspace");
+                    const refSusWorkspace = document.getElementById("verifierRefSusWorkspace");
+                    const tabDisputeEl = document.getElementById("tabDispute");
+
+                    if (dispType === "Seller ↔ Buyer Conflict") {
+                        if (sbWorkspace) sbWorkspace.style.display = "block";
+                        if (refSusWorkspace) refSusWorkspace.style.display = "none";
+                        if (tabDisputeEl) tabDisputeEl.style.display = "none";
+                        renderVerifierStep(1);
+                    } else {
+                        if (sbWorkspace) sbWorkspace.style.display = "none";
+                        if (refSusWorkspace) refSusWorkspace.style.display = "block";
+                        if (tabDisputeEl) tabDisputeEl.style.display = "block";
+                    }
+
+                    const sessBadge = document.getElementById("verifierSessionBadge");
+                    if (sessBadge) sessBadge.textContent = `Session: ${currentVerifierSession.session_id}`;
+                }
+            } catch (err) {
+                console.error("Failed to initialize dispute session:", err);
+            }
+        });
+    }
+
+    // Reset button
+    const btnReset = document.getElementById("btnResetDispute");
+    if (btnReset) {
+        btnReset.addEventListener("click", async () => {
+            try {
+                const res = await fetch("/api/verifier/reset", { method: "POST" });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentVerifierSession = data.session;
+                    currentVerifierStep = 1;
+
+                    const sbWorkspace = document.getElementById("verifierSellerBuyerWorkspace");
+                    const refSusWorkspace = document.getElementById("verifierRefSusWorkspace");
+                    const tabDisputeEl = document.getElementById("tabDispute");
+                    const reportCard = document.getElementById("verifierFinalReportCard");
+
+                    if (sbWorkspace) sbWorkspace.style.display = "none";
+                    if (refSusWorkspace) refSusWorkspace.style.display = "none";
+                    if (tabDisputeEl) tabDisputeEl.style.display = "none";
+                    if (reportCard) reportCard.style.display = "none";
+
+                    const sessBadge = document.getElementById("verifierSessionBadge");
+                    if (sessBadge) sessBadge.textContent = "Session: Reset";
+
+                    initOrRefreshVerifierProfile();
+                }
+            } catch (err) {
+                console.error("Failed to reset verifier session:", err);
+            }
+        });
+    }
+
+    // Stepper navigation controls
+    const btnPrev = document.getElementById("btnVerifierPrevStep");
+    if (btnPrev) {
+        btnPrev.addEventListener("click", () => {
+            if (currentVerifierStep > 1) {
+                currentVerifierStep--;
+                renderVerifierStep(currentVerifierStep);
+            }
+        });
+    }
+
+    const btnNext = document.getElementById("btnVerifierNextStep");
+    if (btnNext) {
+        btnNext.addEventListener("click", () => {
+            if (currentVerifierStep < 13) {
+                currentVerifierStep++;
+                renderVerifierStep(currentVerifierStep);
+            }
+        });
+    }
+
+    // Execute current step button
+    const btnExec = document.getElementById("btnVerifierExecStep");
+    if (btnExec) {
+        btnExec.addEventListener("click", async () => {
+            btnExec.disabled = true;
+            btnExec.textContent = `Executing Step ${currentVerifierStep}...`;
+            try {
+                const res = await fetch("/api/verifier/execute_step", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ step_number: currentVerifierStep })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    currentVerifierSession = data.session;
+                    renderVerifierStep(currentVerifierStep);
+
+                    // If final step, also render final report
+                    if (currentVerifierStep === 13 && currentVerifierSession.final_report) {
+                        renderFinalReport(currentVerifierSession.final_report);
+                    }
+                } else {
+                    const err = await res.json();
+                    alert(`Step verification error: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to execute verification step:", err);
+            } finally {
+                btnExec.disabled = false;
+                btnExec.textContent = `Execute Step ${currentVerifierStep}`;
+            }
+        });
+    }
+
+    // Verify all steps button
+    const btnRunAll = document.getElementById("btnVerifierRunAll");
+    if (btnRunAll) {
+        btnRunAll.addEventListener("click", async () => {
+            btnRunAll.disabled = true;
+            btnRunAll.textContent = "Verifying All Steps...";
+            try {
+                const res = await fetch("/api/verifier/run_all_steps", { method: "POST" });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentVerifierSession = data.session;
+                    currentVerifierStep = 13;
+                    renderVerifierStep(13);
+                    if (currentVerifierSession.final_report) {
+                        renderFinalReport(currentVerifierSession.final_report);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to run all verifier steps:", err);
+            } finally {
+                btnRunAll.disabled = false;
+                btnRunAll.textContent = "Verify All Steps";
+            }
+        });
+    }
+
+    // Stepper pill clicks
+    const stepperPills = document.querySelectorAll("#verifierStepper .step-tracker-pill");
+    stepperPills.forEach(pill => {
+        pill.addEventListener("click", () => {
+            const stepNum = parseInt(pill.dataset.step, 10);
+            if (!isNaN(stepNum)) {
+                currentVerifierStep = stepNum;
+                renderVerifierStep(stepNum);
+            }
+        });
+    });
+}
+
+async function initOrRefreshVerifierProfile() {
+    try {
+        const res = await fetch("/api/verifier/state");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const txList = data.available_transactions || [];
+        const txSelect = document.getElementById("verifierTxSelect");
+        const noTxNotice = document.getElementById("verifierNoTxNotice");
+        const controlsContainer = document.getElementById("verifierControlsContainer");
+
+        if (txList.length === 0) {
+            if (noTxNotice) noTxNotice.style.display = "block";
+            const btnInit = document.getElementById("btnInitDispute");
+            if (btnInit) btnInit.disabled = true;
+            const sbWorkspace = document.getElementById("verifierSellerBuyerWorkspace");
+            const refSusWorkspace = document.getElementById("verifierRefSusWorkspace");
+            if (sbWorkspace) sbWorkspace.style.display = "none";
+            if (refSusWorkspace) refSusWorkspace.style.display = "none";
+            return;
+        } else {
+            if (noTxNotice) noTxNotice.style.display = "none";
+            const btnInit = document.getElementById("btnInitDispute");
+            if (btnInit) btnInit.disabled = false;
+        }
+
+        // Populate transaction select
+        if (txSelect) {
+            txSelect.innerHTML = "";
+            txList.forEach(t => {
+                const opt = document.createElement("option");
+                opt.value = t.transaction_id;
+                opt.textContent = `${t.transaction_id} (${t.design} • ${t.seller_id} • ${t.buyer_id})`;
+                txSelect.appendChild(opt);
+            });
+        }
+
+        // Populate summary box for first transaction
+        const tx = txList[0];
+        const sTxId = document.getElementById("vSummaryTxId");
+        if (sTxId) sTxId.textContent = tx.transaction_id;
+        const sSellerId = document.getElementById("vSummarySellerId");
+        if (sSellerId) sSellerId.textContent = tx.seller_id;
+        const sBuyerId = document.getElementById("vSummaryBuyerId");
+        if (sBuyerId) sBuyerId.textContent = tx.buyer_id;
+        const sDesign = document.getElementById("vSummaryDesign");
+        if (sDesign) sDesign.textContent = tx.design;
+        const sRule = document.getElementById("vSummaryRule");
+        if (sRule) sRule.textContent = `${tx.encoding_rule_id} (v${tx.encoding_rule_version})`;
+        const sRights = document.getElementById("vSummaryRights");
+        if (sRights) sRights.textContent = `License (${tx.license_type})`;
+        const sReqStatus = document.getElementById("vSummaryReqStatus");
+        if (sReqStatus) sReqStatus.textContent = tx.request_status;
+        const sContribStatus = document.getElementById("vSummaryContribStatus");
+        if (sContribStatus) sContribStatus.textContent = `${tx.buyer_contribution_status}`;
+
+        // Evidence pills and missing check
+        const readyBadge = document.getElementById("vTxReadyBadge");
+        const missingNotice = document.getElementById("vMissingEvidenceNotice");
+        const missingList = document.getElementById("vMissingEvidenceList");
+
+        if (tx.is_ready_for_verification) {
+            if (readyBadge) {
+                readyBadge.className = "badge badge-success";
+                readyBadge.textContent = "Evidence Ready";
+            }
+            if (missingNotice) missingNotice.style.display = "none";
+        } else {
+            if (readyBadge) {
+                readyBadge.className = "badge badge-warning";
+                readyBadge.textContent = "Evidence Incomplete";
+            }
+            if (missingNotice) {
+                missingNotice.style.display = "block";
+                const missing = [];
+                if (!tx.available_evidence.includes("Original Encoding D")) missing.push("Design Encoding D (Step 2 in Seller Profile)");
+                if (!tx.available_evidence.includes("Buyer Bitstream B")) missing.push("Buyer Contribution B (Buyer Profile approval)");
+                if (!tx.available_evidence.includes("Watermarked RTL")) missing.push("Watermark Workflow execution (Step 4 in Seller Profile)");
+                if (missingList) missingList.textContent = missing.join("; ") || "Complete Seller & Buyer workflows.";
+            }
+        }
+
+        // Update session
+        if (data.session) {
+            currentVerifierSession = data.session;
+            const sessBadge = document.getElementById("verifierSessionBadge");
+            if (sessBadge) sessBadge.textContent = `Session: ${currentVerifierSession.session_id}`;
+            if (currentVerifierSession.final_report) {
+                renderFinalReport(currentVerifierSession.final_report);
+            }
+        }
+    } catch (err) {
+        console.warn("Failed to refresh verifier profile state:", err);
+    }
+}
+
+function renderVerifierStep(stepNum) {
+    const meta = VERIFIER_STEPS_META.find(m => m.num === stepNum) || VERIFIER_STEPS_META[0];
+
+    const badgeNum = document.getElementById("vStepBadgeNum");
+    if (badgeNum) badgeNum.textContent = meta.num;
+
+    const titleEl = document.getElementById("vStepHeaderTitle");
+    if (titleEl) titleEl.textContent = meta.title;
+
+    const descEl = document.getElementById("vStepHeaderDesc");
+    if (descEl) descEl.textContent = meta.desc;
+
+    const partyEl = document.getElementById("vStepPartyBadge");
+    if (partyEl) partyEl.textContent = `Party: ${meta.party}`;
+
+    const btnExec = document.getElementById("btnVerifierExecStep");
+    if (btnExec) btnExec.textContent = `Execute Step ${stepNum}`;
+
+    // Update stepper pill active states
+    document.querySelectorAll("#verifierStepper .step-tracker-pill").forEach(pill => {
+        const pNum = parseInt(pill.dataset.step, 10);
+        pill.classList.remove("active");
+        if (pNum === stepNum) pill.classList.add("active");
+
+        if (currentVerifierSession && currentVerifierSession.step_results) {
+            const stepRes = currentVerifierSession.step_results[`step_${pNum}`];
+            if (stepRes) {
+                if (stepRes.status === "MATCH" || stepRes.status === "NOT REQUIRED" || stepRes.status === "LOADED" || stepRes.status === "EXTRACTED" || stepRes.status === "VALIDATED") {
+                    pill.classList.add("completed");
+                    pill.classList.remove("failed");
+                } else if (stepRes.status === "MISMATCH" || stepRes.status === "BLOCKED") {
+                    pill.classList.add("failed");
+                    pill.classList.remove("completed");
+                }
+            }
+        }
+    });
+
+    const stepResult = currentVerifierSession && currentVerifierSession.step_results
+        ? currentVerifierSession.step_results[`step_${stepNum}`]
+        : null;
+
+    const statusBadge = document.getElementById("vStepStatusBadge");
+    const s1StatusBadge = document.getElementById("vStage1StatusBadge");
+    const s2StatusBadge = document.getElementById("vStage2StatusBadge");
+    const s1MethodText = document.getElementById("vStage1MethodText");
+    const s1InputText = document.getElementById("vStage1InputText");
+    const s1ValBox = document.getElementById("vStage1ValueBox");
+    const s1PropsText = document.getElementById("vStage1PropsText");
+    const s2OpeningBox = document.getElementById("vStage2OpeningBox");
+    const s2StoredBox = document.getElementById("vStage2StoredBox");
+    const s2RecalcBox = document.getElementById("vStage2RecalcBox");
+    const s2ResultPill = document.getElementById("vStage2ResultPill");
+    const notesText = document.getElementById("vStepNotesText");
+
+    if (stepResult) {
+        if (statusBadge) {
+            statusBadge.textContent = stepResult.status;
+            statusBadge.className = stepResult.status === "MATCH" || stepResult.status === "NOT REQUIRED" || stepResult.status === "LOADED" || stepResult.status === "EXTRACTED" || stepResult.status === "VALIDATED"
+                ? "status-badge-match"
+                : (stepResult.status === "MISMATCH" ? "status-badge-mismatch" : "status-badge-blocked");
+        }
+
+        const s1 = stepResult.stage1_reconstruction || {};
+        const s2 = stepResult.stage2_verification || {};
+
+        if (s1StatusBadge) s1StatusBadge.textContent = s1.status || "COMPUTED";
+        if (s2StatusBadge) s2StatusBadge.textContent = s2.status || "VERIFIED";
+
+        if (s1MethodText) s1MethodText.textContent = s1.method || s1.rule || s1.derivation_method || meta.defaultMethod;
+        if (s1InputText) s1InputText.textContent = s1.artifact_type || s1.design || JSON.stringify(s1.inputs || meta.defaultInput);
+
+        const val = s1.calculated_value_D || s1.extracted_bitstream || s1.extracted_bitstream_W1 || s1.reconstructed_watermark_W || s1.bitstream_B || s1.sha256_digest || "--";
+        if (s1ValBox) s1ValBox.textContent = val;
+
+        const prop = s1.bit_length ? `${s1.bit_length} bits` : (s1.lines_of_code ? `${s1.lines_of_code} lines` : "--");
+        if (s1PropsText) s1PropsText.textContent = prop;
+
+        if (s2OpeningBox) s2OpeningBox.textContent = s2.opening_factor_r_D || s2.opening_factor_r_W1 || s2.opening_factor_r_W || s2.opening_factor_r_B || "--";
+        if (s2StoredBox) s2StoredBox.textContent = s2.stored_commitment_C_D || s2.stored_commitment_C_W1 || s2.stored_commitment_C_W || s2.stored_commitment_C_B || s2.stored_c_es || "--";
+        if (s2RecalcBox) s2RecalcBox.textContent = s2.recalculated_commitment_C_D || s2.recalculated_commitment_C_W1 || s2.recalculated_commitment_C_W || s2.recalculated_commitment_C_B || "--";
+
+        if (s2ResultPill) {
+            s2ResultPill.textContent = s2.status || stepResult.status;
+            s2ResultPill.className = s2.status === "MATCH" || s2.status === "NOT REQUIRED"
+                ? "badge badge-success"
+                : (s2.status === "MISMATCH" ? "badge badge-danger" : "badge badge-warning");
+        }
+
+        if (notesText) notesText.textContent = stepResult.notes || "Step executed successfully.";
+    } else {
+        if (statusBadge) {
+            statusBadge.textContent = "READY TO EXECUTE";
+            statusBadge.className = "badge badge-warning";
+        }
+        if (s1StatusBadge) s1StatusBadge.textContent = "Pending";
+        if (s2StatusBadge) s2StatusBadge.textContent = "Pending";
+        if (s1MethodText) s1MethodText.textContent = meta.defaultMethod;
+        if (s1InputText) s1InputText.textContent = meta.defaultInput;
+        if (s1ValBox) s1ValBox.textContent = "Click 'Execute Step' to independently calculate.";
+        if (s1PropsText) s1PropsText.textContent = "--";
+        if (s2OpeningBox) s2OpeningBox.textContent = "Authorized opening secret requested upon calculation.";
+        if (s2StoredBox) s2StoredBox.textContent = "--";
+        if (s2RecalcBox) s2RecalcBox.textContent = "--";
+        if (s2ResultPill) {
+            s2ResultPill.textContent = "PENDING";
+            s2ResultPill.className = "badge badge-v1";
+        }
+        if (notesText) notesText.textContent = "Step not yet executed. Click 'Execute Step' to run independent calculation.";
+    }
+}
+
+function renderFinalReport(rep) {
+    const reportCard = document.getElementById("verifierFinalReportCard");
+    if (!reportCard || !rep) return;
+
+    reportCard.style.display = "block";
+
+    const banner = document.getElementById("vReportOverallBanner");
+    if (banner) {
+        banner.textContent = `OVERALL: ${rep.overall_evidence_status}`;
+        banner.className = rep.overall_evidence_status === "CONSISTENT"
+            ? "status-badge-match"
+            : (rep.overall_evidence_status === "INCONSISTENT" ? "status-badge-mismatch" : "status-badge-blocked");
+    }
+
+    const setStat = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.textContent = val;
+            el.className = val === "MATCH" || val === "NOT REQUIRED"
+                ? "report-stat-num status-match"
+                : (val === "MISMATCH" ? "report-stat-num status-mismatch" : "report-stat-num");
+        }
+    };
+
+    setStat("repStatD", rep.design_encoding);
+    setStat("repStatES", rep.secured_encoding);
+    setStat("repStatW1", rep.embedded_watermark);
+    setStat("repStatW", rep.complete_watermark);
+    setStat("repStatB", rep.buyer_contribution);
+    setStat("repStatF", rep.watermark_generation_relationship);
+    setStat("repStatTx", rep.transaction_record);
+
+    const rightsEl = document.getElementById("repStatRights");
+    if (rightsEl) rightsEl.textContent = rep.recorded_rights || "License";
+
+    const conflictBox = document.getElementById("vReportRightsConflictBox");
+    const conflictText = document.getElementById("vReportRightsConflictText");
+    if (conflictBox && conflictText) {
+        if (rep.rights_conflict) {
+            conflictBox.style.display = "block";
+            conflictText.textContent = rep.rights_conflict_details || "Buyer claims ownership, but recorded transaction grants only an Exclusive License. Commitment matches do NOT establish legal ownership.";
+        } else {
+            conflictBox.style.display = "none";
+        }
+    }
+
+    const findingsEl = document.getElementById("vReportFindingsText");
+    if (findingsEl) {
+        if (rep.findings_summary) {
+            findingsEl.textContent = rep.findings_summary;
+        } else if (rep.overall_evidence_status === "CONSISTENT") {
+            findingsEl.textContent = `All cryptographic commitments, structural encodings, watermark splits, and buyer contribution bitstreams are mathematically consistent with recorded transaction terms. Recorded license type is ${rep.recorded_rights} (exclusive); legal ownership remains with Seller SELLER-001.`;
+        } else {
+            findingsEl.textContent = `Evidence audit detected discrepancies or incomplete prerequisite evidence. Consistency status is ${rep.overall_evidence_status}.`;
+        }
     }
 }
 

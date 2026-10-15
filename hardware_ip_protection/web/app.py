@@ -18,6 +18,7 @@ from hardware_ip_protection.hls.dfg import (
     create_arf,
     create_mesa,
     create_conv3x3,
+    create_iir_butterworth,
     DFG,
 )
 from hardware_ip_protection.pipeline.engine import ProtectionPipeline, DisputePipeline
@@ -25,6 +26,11 @@ from hardware_ip_protection.verification.test_vector_generator import TestVector
 from hardware_ip_protection.forensics.watermark_extractor import TransactionWatermarkExtractor
 
 from hardware_ip_protection.pipeline.repository import ProtectionRepository
+from hardware_ip_protection.pipeline.transaction_manager import (
+    TransactionManager,
+    AVAILABLE_DESIGNS,
+    AVAILABLE_ENCODING_RULES,
+)
 
 app = FastAPI(title="Hardware IP Protection V1", version="1.0.0")
 
@@ -37,6 +43,7 @@ BENCHMARK_FACTORIES = {
     "arf_filter": create_arf,
     "mesa_benchmark": create_mesa,
     "conv3x3_kernel": create_conv3x3,
+    "iir_butterworth": create_iir_butterworth,
 }
 
 
@@ -465,6 +472,243 @@ def verify_dispute(req: DisputeRequest):
         },
         "structural_encoding_verification": res.structural_encoding_verification,
     }
+
+
+# ==============================================================================
+# Transaction Profile Workflow Endpoints (Seller, Buyer, Verifier)
+# ==============================================================================
+
+class SelectDesignRequest(BaseModel):
+    design_id: str
+    rule_id: str
+
+
+class EncodeDesignRequest(BaseModel):
+    use_table_quirks: bool = False
+
+
+class ContinueWatermarkRequest(BaseModel):
+    transaction_id: Optional[str] = "TX-001"
+    seller_id: Optional[str] = "SELLER-001"
+    buyer_id: Optional[str] = "BUYER-001"
+    license_type: Optional[str] = "exclusive"
+    k_tx: Optional[str] = "K_tx_symmetric_credential_secret_777"
+    watermark_length: Optional[Any] = "auto"
+
+
+@app.get("/api/transaction/state")
+def get_transaction_state():
+    mgr = TransactionManager.get_instance()
+    return {
+        "state": mgr.get_state().model_dump(),
+        "designs": AVAILABLE_DESIGNS,
+        "rules": AVAILABLE_ENCODING_RULES,
+    }
+
+
+@app.post("/api/transaction/select_design")
+def select_design_endpoint(req: SelectDesignRequest):
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.select_design_and_rule(req.design_id, req.rule_id)
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/encode_design")
+def encode_design_endpoint(req: Optional[EncodeDesignRequest] = None):
+    mgr = TransactionManager.get_instance()
+    use_quirks = req.use_table_quirks if req else False
+    try:
+        st = mgr.generate_original_encoding(use_table_quirks=use_quirks)
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/request_buyer")
+def request_buyer_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.request_buyer_contribution()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/generate_buyer_commitment")
+def generate_buyer_commitment_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.generate_buyer_commitment()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/approve_buyer")
+def approve_buyer_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.approve_buyer_request()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/reject_buyer")
+def reject_buyer_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.reject_buyer_request()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/continue_watermark")
+def continue_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
+    mgr = TransactionManager.get_instance()
+    p = req or ContinueWatermarkRequest()
+    try:
+        st = mgr.continue_watermark_workflow(
+            transaction_id=p.transaction_id or "TX-001",
+            seller_id=p.seller_id or "SELLER-001",
+            buyer_id=p.buyer_id or "BUYER-001",
+            license_type=p.license_type or "exclusive",
+            k_tx=p.k_tx or "K_tx_symmetric_credential_secret_777",
+            watermark_length=p.watermark_length or "auto",
+        )
+        if st.protection_id and st.pipeline_result:
+            active_sessions[st.protection_id] = {
+                "protected_verilog": st.watermarked_RTL,
+                "original_verilog": st.original_RTL,
+                "benchmark_id": st.design_id,
+                "structural_encoding": st.secured_encoding_E_S,
+            }
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/reset")
+def reset_transaction_endpoint():
+    mgr = TransactionManager.get_instance()
+    st = mgr.reset()
+    return {"state": st.model_dump()}
+
+
+# ==============================================================================
+# Verifier Profile & Step-by-Step Dispute Verification Endpoints
+# ==============================================================================
+
+from hardware_ip_protection.pipeline.verifier_engine import VerifierEngine
+
+
+class ConfigureDisputeRequest(BaseModel):
+    transaction_id: Optional[str] = "TX-001"
+    dispute_type: Optional[str] = "Seller ↔ Buyer Conflict"
+    dispute_subcategory: Optional[str] = None
+
+
+class ExecuteVerifierStepRequest(BaseModel):
+    step_number: int
+    overrides: Optional[Dict[str, Any]] = None
+
+
+class RunAllStepsRequest(BaseModel):
+    overrides: Optional[Dict[str, Any]] = None
+
+
+class AuditRefSusRequest(BaseModel):
+    scenario_name: Optional[str] = "Untouched Design"
+    subcategory: Optional[str] = "Exact or near-copy suspicion."
+    suspicious_verilog: Optional[str] = None
+    protection_id: Optional[str] = None
+
+
+@app.get("/api/verifier/state")
+def get_verifier_state():
+    v_eng = VerifierEngine.get_instance()
+    sess = v_eng.get_session()
+    tx_list = v_eng.get_available_transactions()
+    mgr = TransactionManager.get_instance()
+    st = mgr.get_state()
+    return {
+        "session": sess.model_dump(),
+        "available_transactions": tx_list,
+        "dispute_categories": v_eng.DISPUTE_CATEGORIES,
+        "transaction_state": st.model_dump(),
+    }
+
+
+@app.post("/api/verifier/configure_dispute")
+def configure_dispute_endpoint(req: ConfigureDisputeRequest):
+    v_eng = VerifierEngine.get_instance()
+    tx_id = req.transaction_id or "TX-001"
+    disp_type = req.dispute_type or "Seller ↔ Buyer Conflict"
+    sess = v_eng.reset_session(
+        transaction_id=tx_id,
+        dispute_type=disp_type,
+        dispute_subcategory=req.dispute_subcategory,
+    )
+    return {"session": sess.model_dump()}
+
+
+@app.post("/api/verifier/execute_step")
+def execute_verifier_step_endpoint(req: ExecuteVerifierStepRequest):
+    v_eng = VerifierEngine.get_instance()
+    try:
+        res = v_eng.execute_step(req.step_number, req.overrides)
+        return {
+            "step_result": res.model_dump(),
+            "session": v_eng.get_session().model_dump(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/verifier/run_all_steps")
+def run_all_verifier_steps_endpoint(req: Optional[RunAllStepsRequest] = None):
+    v_eng = VerifierEngine.get_instance()
+    ov = req.overrides if req else None
+    try:
+        sess = v_eng.run_all_steps(ov)
+        return {"session": sess.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/verifier/reset")
+def reset_verifier_endpoint():
+    v_eng = VerifierEngine.get_instance()
+    sess = v_eng.reset_session()
+    return {"session": sess.model_dump()}
+
+
+@app.post("/api/verifier/audit_ref_sus")
+def audit_ref_sus_endpoint(req: AuditRefSusRequest):
+    v_eng = VerifierEngine.get_instance()
+    mgr = TransactionManager.get_instance()
+    st = mgr.get_state()
+
+    sus_verilog = req.suspicious_verilog or st.watermarked_RTL
+    if not sus_verilog:
+        raise HTTPException(status_code=400, detail="No suspicious Verilog provided and none found in transaction state.")
+
+    try:
+        result = v_eng.audit_reference_suspicious(
+            suspicious_verilog=sus_verilog,
+            scenario_name=req.scenario_name or "Untouched Design",
+            subcategory=req.subcategory or "Exact or near-copy suspicion.",
+            protection_id=req.protection_id or st.protection_id,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 # Static files mount

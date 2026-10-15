@@ -133,13 +133,21 @@ class PedersenEngine:
     def hex_to_point(self, hex_str: str) -> PointJacobi:
         """
         Decodes a compressed 33-byte hex string back to a Curve Point.
+        Validates format, field bounds, and curve equation satisfaction.
         """
-        data = bytes.fromhex(hex_str)
+        try:
+            data = bytes.fromhex(hex_str)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Malformed hexadecimal point string: {e}")
+
         if len(data) != 33 or data[0] not in (2, 3):
-            raise ValueError("Invalid compressed point format")
+            raise ValueError(f"Invalid compressed point format: expected 33 bytes with prefix 02 or 03, got {len(data)} bytes")
         prefix = data[0]
         x = int.from_bytes(data[1:], "big")
         p = self.curve.curve.p()
+        if x >= p or x < 0:
+            raise ValueError("Coordinate x out of range for field F_p")
+
         a = self.curve.curve.a()
         b = self.curve.curve.b()
         rhs = (pow(x, 3, p) + a * x + b) % p
@@ -194,10 +202,19 @@ class PedersenEngine:
             return CommitmentVerificationStatus.NOT_VERIFIABLE
 
         try:
+            # Ensure commitment_hex is a valid compressed point on NIST P-256
+            self.hex_to_point(commitment_hex)
+
             if isinstance(blinding_factor, str):
-                r = int(blinding_factor, 16)
+                blinding_factor_str = blinding_factor.strip()
+                if not blinding_factor_str:
+                    return CommitmentVerificationStatus.NOT_VERIFIABLE
+                r = int(blinding_factor_str, 16)
             else:
                 r = int(blinding_factor)
+
+            if r < 0:
+                return CommitmentVerificationStatus.INVALID
 
             s = self.hash_to_scalar(data)
             r = r % self.order
@@ -205,7 +222,7 @@ class PedersenEngine:
             recomputed_point = (s * self.G) + (r * self.H)
             recomputed_hex = self.point_to_hex(recomputed_point)
 
-            if recomputed_hex.lower() == commitment_hex.lower():
+            if recomputed_hex.lower() == commitment_hex.strip().lower():
                 return CommitmentVerificationStatus.VALID
             else:
                 return CommitmentVerificationStatus.INVALID
