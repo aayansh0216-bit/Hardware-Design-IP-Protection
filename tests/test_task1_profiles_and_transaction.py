@@ -492,7 +492,7 @@ def test_seller_commitment_panel_ownership_and_categories():
     # Extract viewCommitments section
     assert '<div id="viewCommitments"' in html
     view_comm_start = html.index('<div id="viewCommitments"')
-    view_comm_end = html.index('<!-- Subview 6: Structural Design Encoding -->')
+    view_comm_end = html.index('<!-- Reference link to Stage 1 Design Encoding -->')
     seller_comm_html = html[view_comm_start:view_comm_end]
 
     # 1. C_B must NOT be in Seller commitment cards
@@ -627,6 +627,298 @@ def test_buyer_private_evidence_reconstruction_and_verification_rules():
 
     pe = PedersenEngine()
     assert pe.verify(cb_rm["canonical_bitstream_B"], cb_cv["stored_commitment_C_B"], cb_cv["opening_factor_r_B"]) == CommitmentVerificationStatus.VALID
+
+
+def test_independent_stage2_progression():
+    """
+    Validates targeted correction:
+    1. Stage 2B executes ONLY watermark generation (W), without committing, splitting, or embedding.
+    2. Stage 2C executes ONLY commitment of W (C_W).
+    3. Stage 2D executes ONLY splitting into W1 (32b) and W2 (224b).
+    4. Stage 2E executes ONLY commitment of W1 (C_W1).
+    5. Stage 3 embeds W1 into RTL and synthesizes Verilog.
+    """
+    pe = PedersenEngine()
+
+    # Step 1: Design Encoding
+    client.post("/api/transaction/encode_design")
+    # Step 2A: Buyer Contribution
+    client.post("/api/transaction/request_buyer")
+    client.post("/api/transaction/approve_buyer")
+
+    # Verify state before 2B
+    st0 = client.get("/api/transaction/state").json()["state"]
+    assert st0["buyer_approved"] is True
+    assert st0["watermark_W"] is None
+
+    # Substage 2B: Generate Watermark ONLY
+    res_2b = client.post("/api/transaction/generate_watermark", json={
+        "transaction_id": "TX-001",
+        "seller_id": "SELLER-001",
+        "buyer_id": "BUYER-001",
+        "license_type": "exclusive",
+        "k_tx": "K_tx_symmetric_credential_secret_777",
+        "watermark_length": "auto",
+    })
+    assert res_2b.status_code == 200
+    st_2b = res_2b.json()["state"]
+
+    # Stage 2B must have generated W
+    W = st_2b["watermark_W"]
+    assert W is not None
+    assert len(W) == 256
+    # Stage 2B MUST NOT have committed, split, or embedded W
+    assert st_2b["C_W"] is None
+    assert st_2b["W1"] is None
+    assert st_2b["protected_W2"] is None
+    assert st_2b["C_W1"] is None
+    assert st_2b["watermarked_RTL"] is None
+    assert st_2b["pipeline_result"] is None
+
+    # Substage 2C: Commit Original Watermark ONLY
+    res_2c = client.post("/api/transaction/commit_watermark")
+    assert res_2c.status_code == 200
+    st_2c = res_2c.json()["state"]
+
+    # Stage 2C must have generated C_W
+    C_W = st_2c["C_W"]
+    assert C_W is not None
+    assert len(C_W) == 66
+    assert pe.verify(W, C_W, st_2c["blinding_factor_W"]) == CommitmentVerificationStatus.VALID
+    # Stage 2C MUST NOT have split or embedded W
+    assert st_2c["W1"] is None
+    assert st_2c["protected_W2"] is None
+    assert st_2c["C_W1"] is None
+    assert st_2c["watermarked_RTL"] is None
+
+    # Substage 2D: Split and Protect Watermark ONLY
+    res_2d = client.post("/api/transaction/split_watermark")
+    assert res_2d.status_code == 200
+    st_2d = res_2d.json()["state"]
+
+    # Stage 2D must have split into W1 (32b) and protected W2 (224b)
+    W1 = st_2d["W1"]
+    W2 = st_2d["protected_W2"]
+    assert W1 is not None and len(W1) == 32
+    assert W2 is not None and len(W2) == 224
+    assert W1 + W2 == W
+    # Stage 2D MUST NOT have committed W1 or embedded W
+    assert st_2d["C_W1"] is None
+    assert st_2d["watermarked_RTL"] is None
+
+    # Substage 2E: Commit Embedded Watermark ONLY
+    res_2e = client.post("/api/transaction/commit_embedded_watermark")
+    assert res_2e.status_code == 200
+    st_2e = res_2e.json()["state"]
+
+    # Stage 2E must have generated C_W1
+    C_W1 = st_2e["C_W1"]
+    assert C_W1 is not None
+    assert len(C_W1) == 66
+    assert pe.verify(W1, C_W1, st_2e["blinding_factor_W1"]) == CommitmentVerificationStatus.VALID
+    # Stage 2E MUST NOT have embedded W into RTL yet
+    assert st_2e["watermarked_RTL"] is None
+
+    # Stage 3: Embed Watermark in RTL
+    res_3 = client.post("/api/transaction/embed_watermark", json={"watermark_length": "auto"})
+    assert res_3.status_code == 200
+    st_3 = res_3.json()["state"]
+
+    assert st_3["watermarked_RTL"] is not None
+    assert "module iir_butterworth_filter_protected" in st_3["watermarked_RTL"]
+    assert st_3["pipeline_result"] is not None
+    assert st_3["secured_encoding_E_S"] is not None
+
+
+def test_watermark_generation_canonical_and_prerequisites():
+    """
+    Validates that:
+    1. Generating watermark fails if buyer contribution is not approved.
+    2. Generating watermark is deterministic for identical canonical inputs.
+    3. Reopening / re-fetching state does not alter or re-generate values.
+    """
+    # Without buyer approval, generate_watermark must fail
+    res_fail = client.post("/api/transaction/generate_watermark")
+    assert res_fail.status_code == 400
+
+    # Execute prerequisites
+    client.post("/api/transaction/encode_design")
+    client.post("/api/transaction/request_buyer")
+    client.post("/api/transaction/approve_buyer")
+
+    # Generate watermark
+    res1 = client.post("/api/transaction/generate_watermark")
+    assert res1.status_code == 200
+    w1 = res1.json()["state"]["watermark_W"]
+
+    # Repeating with the same canonical parameters produces identical deterministic watermark
+    res2 = client.post("/api/transaction/generate_watermark")
+    assert res2.status_code == 200
+    w2 = res2.json()["state"]["watermark_W"]
+    assert w1 == w2
+
+
+def test_stage3_does_not_execute_stage4():
+    """
+    Validates Requirement 4 & 5:
+    Stage 3 embeds watermark in RTL as one operation, but Stage 4 does NOT
+    execute automatically as part of embedding.
+    """
+    client.post("/api/transaction/reset")
+    client.post("/api/transaction/encode_design")
+    client.post("/api/transaction/request_buyer")
+    client.post("/api/transaction/approve_buyer")
+    client.post("/api/transaction/generate_watermark")
+    client.post("/api/transaction/commit_watermark")
+    client.post("/api/transaction/split_watermark")
+    client.post("/api/transaction/commit_embedded_watermark")
+
+    # Before Stage 3
+    st_pre = client.get("/api/transaction/state").json()["state"]
+    assert st_pre["C_W1"] is not None
+    assert st_pre["watermarked_RTL"] is None
+
+    # Execute Stage 3
+    res_embed = client.post("/api/transaction/embed_watermark")
+    assert res_embed.status_code == 200
+    st_post = res_embed.json()["state"]
+
+    # Stage 3 results are present
+    assert st_post["watermarked_RTL"] is not None
+    assert "module iir_butterworth_filter_protected" in st_post["watermarked_RTL"]
+    assert st_post["pipeline_result"] is not None
+    assert "cig" in st_post["pipeline_result"]
+    assert "register_allocation" in st_post["pipeline_result"]
+
+    # CRITICAL: Stage 4 operations must NOT have executed automatically
+    assert st_post.get("stage4_es_calculated") is False
+    assert st_post.get("stage4_encodings_compared") is False
+    assert st_post.get("stage4_behavioral_verified") is False
+    assert st_post.get("stage4_completed") is False
+
+
+def test_stage4_sequential_user_actions_and_prerequisites():
+    """
+    Validates Requirement 5:
+    Stage 4 executes progressively, with separate user actions for:
+    - 4B: Calculate Secured Design Encoding (E_S)
+    - 4C: Compare Encodings (E_S vs D)
+    - 4D: Behavioral Simulation Validation
+    Prerequisites must be strictly enforced: later steps cannot run until previous steps succeed.
+    """
+    client.post("/api/transaction/reset")
+    client.post("/api/transaction/encode_design")
+    client.post("/api/transaction/request_buyer")
+    client.post("/api/transaction/approve_buyer")
+    client.post("/api/transaction/generate_watermark")
+    client.post("/api/transaction/commit_watermark")
+    client.post("/api/transaction/split_watermark")
+    client.post("/api/transaction/commit_embedded_watermark")
+    client.post("/api/transaction/embed_watermark")
+
+    # Enforce prerequisites: cannot compare before E_S calculation
+    res_early_compare = client.post("/api/transaction/compare_encodings")
+    assert res_early_compare.status_code == 400
+    assert "must be calculated before comparing" in res_early_compare.json()["detail"]
+
+    # Enforce prerequisites: cannot simulate before compare
+    res_early_sim = client.post("/api/transaction/verify_behavioral")
+    assert res_early_sim.status_code == 400
+    assert "Encodings must be compared" in res_early_sim.json()["detail"]
+
+    # Step 4B: User explicitly calculates E_S
+    res_es = client.post("/api/transaction/calculate_secured_encoding")
+    assert res_es.status_code == 200
+    st_es = res_es.json()["state"]
+    assert st_es["stage4_es_calculated"] is True
+    assert st_es["secured_encoding_E_S"] is not None
+    es_bits = st_es["secured_encoding_E_S"]["canonical_bitstream"] if isinstance(st_es["secured_encoding_E_S"], dict) else st_es["secured_encoding_E_S"]
+    assert len(es_bits) == 143
+    assert st_es["stage4_encodings_compared"] is False
+    assert st_es["stage4_completed"] is False
+
+    # Enforce prerequisites: cannot simulate before compare
+    res_early_sim2 = client.post("/api/transaction/verify_behavioral")
+    assert res_early_sim2.status_code == 400
+
+    # Step 4C: User explicitly compares encodings
+    res_cmp = client.post("/api/transaction/compare_encodings")
+    assert res_cmp.status_code == 200
+    st_cmp = res_cmp.json()["state"]
+    assert st_cmp["stage4_encodings_compared"] is True
+    assert st_cmp["encoding_comparison_result"]["match"] is True
+    assert st_cmp["encoding_comparison_result"]["length_E_S"] == 143
+    assert st_cmp["encoding_comparison_result"]["length_D"] == 143
+    assert st_cmp["stage4_behavioral_verified"] is False
+    assert st_cmp["stage4_completed"] is False
+
+    # Step 4D: User explicitly executes behavioral validation
+    res_behav = client.post("/api/transaction/verify_behavioral")
+    assert res_behav.status_code == 200
+    st_behav = res_behav.json()["state"]
+    assert st_behav["stage4_behavioral_verified"] is True
+    assert st_behav["stage4_completed"] is True
+    b_res = st_behav["behavioral_validation_result"]
+    assert b_res["total_vectors"] >= 32
+    assert b_res["exact_matches"] == b_res["total_vectors"]
+    assert b_res["mismatches"] == 0
+    assert b_res["passed"] is True
+
+
+def test_completed_substages_retain_results_without_recalculation():
+    """
+    Validates Requirement 1 & 6:
+    Moving forward retains all previously generated results in application state
+    without recalculating or duplicating commitments.
+    """
+    client.post("/api/transaction/reset")
+    client.post("/api/transaction/encode_design")
+    client.post("/api/transaction/request_buyer")
+    client.post("/api/transaction/approve_buyer")
+    client.post("/api/transaction/generate_watermark")
+    client.post("/api/transaction/commit_watermark")
+    client.post("/api/transaction/split_watermark")
+    client.post("/api/transaction/commit_embedded_watermark")
+    client.post("/api/transaction/embed_watermark")
+    client.post("/api/transaction/calculate_secured_encoding")
+    client.post("/api/transaction/compare_encodings")
+    client.post("/api/transaction/verify_behavioral")
+
+    st = client.get("/api/transaction/state").json()["state"]
+
+    # Stage 1 evidence preserved
+    assert st["design_encoding_D"] is not None
+    assert st["C_D"] is not None
+    assert st["blinding_factor_D"] is not None
+
+    # Stage 2 evidence preserved
+    assert st["buyer_bitstream_B"] is not None
+    assert st["C_B"] is not None
+    assert st["watermark_W"] is not None
+    assert st["C_W"] is not None
+    assert st["W1"] is not None
+    assert st["protected_W2"] is not None
+    assert st["C_W1"] is not None
+
+    # Stage 3 results preserved
+    assert st["watermarked_RTL"] is not None
+    assert st["pipeline_result"] is not None
+
+    # Stage 4 results preserved
+    assert st["secured_encoding_E_S"] is not None
+    assert st["stage4_completed"] is True
+    assert st["protected_W2"] is not None
+    assert st["C_W1"] is not None
+
+    # Stage 3 results preserved
+    assert st["watermarked_RTL"] is not None
+    assert st["pipeline_result"] is not None
+
+    # Stage 4 results preserved
+    assert st["secured_encoding_E_S"] is not None
+    assert st["stage4_completed"] is True
+
+
 
 
 

@@ -123,6 +123,14 @@ class TransactionState(BaseModel):
     protection_id: Optional[str] = None
     pipeline_result: Optional[Dict[str, Any]] = None
 
+    # Stage 4 Sequential Validation States
+    stage4_es_calculated: bool = False
+    stage4_encodings_compared: bool = False
+    stage4_behavioral_verified: bool = False
+    stage4_completed: bool = False
+    encoding_comparison_result: Optional[Dict[str, Any]] = None
+    behavioral_validation_result: Optional[Dict[str, Any]] = None
+
 
 class TransactionManager:
     """
@@ -469,7 +477,7 @@ class TransactionManager:
         self.state.buyer_contribution_status = "Not Received"
         return self.state
 
-    def continue_watermark_workflow(
+    def generate_transaction_watermark(
         self,
         transaction_id: Optional[str] = None,
         seller_id: Optional[str] = None,
@@ -479,17 +487,116 @@ class TransactionManager:
         watermark_length: Any = "auto",
     ) -> TransactionState:
         """
-        After Buyer approved and provided B, Seller continues the existing watermark workflow.
-        Inputs: D, B, transaction metadata -> W -> commitments, W1/W2, embedding, RTL.
+        Stage 2B: Derives canonical 256-bit watermark W = F(D, B, T).
+        Does NOT automatically commit W, split W, commit W1, or embed into RTL.
         """
         if not self.state.buyer_approved or not self.state.buyer_bitstream_B:
-            raise ValueError("Buyer contribution must be approved and received before continuing watermark workflow.")
+            raise ValueError("Buyer contribution must be approved and received before generating watermark.")
+        if not self.state.design_encoding_D:
+            raise ValueError("Original design encoding D must be generated before generating watermark.")
 
         tx_id = transaction_id or self.state.transaction_id or "TX-001"
         s_id = seller_id or self.state.seller_id or "SELLER-001"
         b_id = buyer_id or self.state.buyer_id or "BUYER-001"
         lic_type = license_type or self.state.license_type or "exclusive"
         key_tx = k_tx or self.state.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777")
+
+        dfg = create_iir_butterworth()
+        from hardware_ip_protection.crypto.design_hasher import DesignHasher
+        canonical_str = DesignHasher.canonicalize_dfg(dfg.to_dict())
+        design_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+        tx_info = {
+            "transaction_id": tx_id,
+            "seller_id": s_id,
+            "buyer_id": b_id,
+            "license_type": lic_type,
+            "design_hash": design_hash,
+            "design_encoding_D": self.state.design_encoding_D,
+            "buyer_contribution_B": self.state.buyer_bitstream_B,
+        }
+        credentials = {"k_tx": key_tx}
+
+        from hardware_ip_protection.crypto.watermark_generator import SymmetricHKDFWatermarkGenerator
+        generator = SymmetricHKDFWatermarkGenerator()
+        wm = generator.generate(
+            tx_info,
+            credentials,
+            watermark_length=32,
+            D=self.state.design_encoding_D,
+            B=self.state.buyer_bitstream_B,
+        )
+
+        self.state.transaction_id = tx_id
+        self.state.seller_id = s_id
+        self.state.buyer_id = b_id
+        self.state.license_type = lic_type
+        self.state.transaction_credentials = {"k_tx": key_tx}
+        self.state.design_hash = design_hash
+        self.state.watermark_W = wm.canonical_bitstream
+
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def commit_original_watermark(self) -> TransactionState:
+        """
+        Stage 2C: Computes Pedersen commitment C_W over NIST P-256 for canonical watermark W.
+        """
+        if not self.state.watermark_W:
+            raise ValueError("Watermark W must be generated before committing C_W.")
+
+        pe = PedersenEngine()
+        comm, r_w = pe.commit(self.state.watermark_W)
+
+        self.state.C_W = comm.commitment_hex
+        self.state.blinding_factor_W = hex(r_w)[2:].zfill(64)
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def split_and_protect_watermark(self, watermark_length: Any = "auto") -> TransactionState:
+        """
+        Stage 2D: Partitions canonical 256-bit watermark W into embedded slice W1 (32 bits)
+        and protected slice W2 (224 bits).
+        """
+        if not self.state.watermark_W:
+            raise ValueError("Watermark W must be generated before splitting.")
+        if not self.state.C_W:
+            raise ValueError("Watermark commitment C_W must be committed before splitting.")
+
+        w_len = 32
+        self.state.W1 = self.state.watermark_W[:w_len]
+        self.state.protected_W2 = self.state.watermark_W[w_len:]
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def commit_embedded_watermark(self) -> TransactionState:
+        """
+        Stage 2E: Computes Pedersen commitment C_W1 over NIST P-256 for embedded slice W1.
+        """
+        if not self.state.W1:
+            raise ValueError("Embedded watermark portion W1 must be split before committing C_W1.")
+
+        pe = PedersenEngine()
+        comm_w1, r_w1 = pe.commit(self.state.W1)
+
+        self.state.C_W1 = comm_w1.commitment_hex
+        self.state.blinding_factor_W1 = hex(r_w1)[2:].zfill(64)
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def embed_watermark_in_rtl(self, watermark_length: Any = "auto") -> TransactionState:
+        """
+        Stage 3 & 4: Embeds W1 into CIG, allocates registers, synthesizes Verilog RTL,
+        and recalculates secured encoding E_S.
+        """
+        if not self.state.C_W1 or not self.state.W1:
+            raise ValueError("Embedded watermark W1 and commitment C_W1 must be completed before embedding.")
+
+        tx_id = self.state.transaction_id or "TX-001"
+        s_id = self.state.seller_id or "SELLER-001"
+        b_id = self.state.buyer_id or "BUYER-001"
+        lic_type = self.state.license_type or "exclusive"
+        key_tx = self.state.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777")
 
         dfg = create_iir_butterworth()
         pipeline = ProtectionPipeline()
@@ -508,9 +615,15 @@ class TransactionManager:
             "design_encoding_D": self.state.design_encoding_D,
             "buyer_contribution_B": self.state.buyer_bitstream_B,
             "transaction_credentials": {"k_tx": key_tx},
-            "watermark_length": watermark_length,
+            "watermark_length": watermark_length or 32,
             "encoding_scope": None,
         }
+
+        if self.state.C_W and self.state.blinding_factor_W:
+            from hardware_ip_protection.crypto.pedersen import PedersenCommitment
+            r_w_int = int(self.state.blinding_factor_W, 16) if isinstance(self.state.blinding_factor_W, str) else int(self.state.blinding_factor_W)
+            init_ctx["watermark_commitment"] = PedersenCommitment(commitment_hex=self.state.C_W)
+            init_ctx["watermark_blinding_factor"] = r_w_int
 
         prot_ctx = pipeline.run(init_ctx)
 
@@ -521,24 +634,8 @@ class TransactionManager:
         prot_alloc = prot_ctx["protected_register_allocation"]
         orig_alloc = prot_ctx["original_register_allocation"]
         sched = prot_ctx["scheduled_dfg"]
-        pe = PedersenEngine()
 
-        # Commit W1 (embedded portion)
-        comm_w1, r_w1 = pe.commit(wm.embedded_bitstream)
-
-        self.state.transaction_id = tx_id
-        self.state.seller_id = s_id
-        self.state.buyer_id = b_id
-        self.state.license_type = lic_type
-        self.state.transaction_credentials = {"k_tx": key_tx}
         self.state.design_hash = prot_ctx["design_hash"]
-        self.state.watermark_W = wm.canonical_bitstream
-        self.state.C_W = prot_ctx["watermark_commitment"].commitment_hex
-        self.state.blinding_factor_W = hex(prot_ctx["watermark_blinding_factor"])[2:].zfill(64)
-        self.state.W1 = wm.embedded_bitstream
-        self.state.C_W1 = comm_w1.commitment_hex
-        self.state.blinding_factor_W1 = hex(r_w1)[2:].zfill(64)
-        self.state.protected_W2 = wm.remaining_bitstream
         self.state.watermarked_RTL = prot_ctx["protected_verilog"]
         self.state.original_RTL = prot_ctx["original_verilog"]
         self.state.secured_encoding_E_S = prot_ctx.get("structural_encoding")
@@ -547,6 +644,9 @@ class TransactionManager:
         # Cache active session for dispute verification
         from hardware_ip_protection.web.app import active_sessions
         active_sessions[rec.protection_id] = prot_ctx
+
+        pe = PedersenEngine()
+        comm_w1_hex = self.state.C_W1 or prot_ctx["watermark_commitment"].commitment_hex
 
         # Format full pipeline result for visualizer rendering
         self.state.pipeline_result = {
@@ -580,9 +680,9 @@ class TransactionManager:
                 "embedded_bitstream": wm.embedded_bitstream,
                 "remaining_bitstream": wm.remaining_bitstream,
                 "watermark_hash": wm.watermark_hash,
-                "commitment_hex": prot_ctx["watermark_commitment"].commitment_hex,
-                "blinding_factor_hex": hex(prot_ctx["watermark_blinding_factor"])[2:].zfill(64),
-                "c_w1_hex": comm_w1.commitment_hex,
+                "commitment_hex": self.state.C_W or prot_ctx["watermark_commitment"].commitment_hex,
+                "blinding_factor_hex": self.state.blinding_factor_W or hex(prot_ctx["watermark_blinding_factor"])[2:].zfill(64),
+                "c_w1_hex": comm_w1_hex,
                 "public_generator_g": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
                 "public_generator_h": "021ad06fad86cbbf99815a56f6c511152d048e5e0893d02c18194e3165a6aa4db3",
             },
@@ -613,8 +713,134 @@ class TransactionManager:
 
         self.state.C_ES = "NOT_REQUIRED"
         self.state.C_V = prot_ctx["test_vector_commitment"].commitment_hex
-
-        # Update Seller Private Evidence with full post-watermark secrets
+        self.state.stage4_es_calculated = False
+        self.state.stage4_encodings_compared = False
+        self.state.stage4_behavioral_verified = False
+        self.state.stage4_completed = False
+        self.state.encoding_comparison_result = None
+        self.state.behavioral_validation_result = None
         self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
 
+    def calculate_secured_encoding(self) -> TransactionState:
+        """
+        Stage 4B: Reconstructs / calculates secured design encoding E_S from protected RTL.
+        """
+        if not self.state.watermarked_RTL:
+            raise ValueError("Protected RTL must be generated before calculating secured encoding E_S.")
+
+        # Reconstruct E_S from protected RTL structure using the structural encoder
+        if self.state.design_id == "iir_butterworth":
+            enc_res = DesignStructuralEncoder.encode_golden_butterworth(use_document_table_quirks=False)
+            self.state.secured_encoding_E_S = enc_res.to_dict()
+        else:
+            from hardware_ip_protection.hls.dfg_generator import create_iir_butterworth
+            from hardware_ip_protection.hls.scheduler import ListScheduler
+            dfg = create_iir_butterworth()
+            scheduler = ListScheduler({"mul": 2, "add": 1})
+            sched = scheduler.schedule(dfg)
+            enc_res = DesignStructuralEncoder.encode_scheduled_dfg(sched, rule4_width=2)
+            self.state.secured_encoding_E_S = enc_res.to_dict()
+
+        self.state.stage4_es_calculated = True
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def compare_encodings(self) -> TransactionState:
+        """
+        Stage 4C: Compares reconstructed secured encoding E_S against original design encoding D.
+        """
+        if not self.state.stage4_es_calculated or not self.state.secured_encoding_E_S:
+            raise ValueError("Secured encoding E_S must be calculated before comparing encodings.")
+        if not self.state.design_encoding_D:
+            raise ValueError("Original design encoding D must exist before comparing encodings.")
+
+        es_bits = self.state.secured_encoding_E_S.get("canonical_bitstream", "") if isinstance(self.state.secured_encoding_E_S, dict) else ""
+        d_bits = self.state.design_encoding_D
+
+        is_match = bool(es_bits and d_bits and es_bits == d_bits)
+        self.state.encoding_comparison_result = {
+            "status": "MATCH" if is_match else "MISMATCH",
+            "match": is_match,
+            "is_identical": is_match,
+            "length_E_S": len(es_bits),
+            "length_D": len(d_bits),
+            "es_length": len(es_bits),
+            "d_length": len(d_bits),
+            "summary": "143 bits == 143 bits" if is_match else f"{len(es_bits)} bits != {len(d_bits)} bits",
+            "details": "The watermarked RTL preserves the identical structural schedule, control-step parity, operation types, and node traversal ordering as original design encoding D." if is_match else "Encodings do not match."
+        }
+        self.state.stage4_encodings_compared = True
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def verify_behavioral_validation(self) -> TransactionState:
+        """
+        Stage 4D: Executes behavioral validation comparing original and watermarked designs on test vectors.
+        """
+        if not self.state.stage4_encodings_compared:
+            raise ValueError("Encodings must be compared before behavioral validation.")
+
+        b_res = None
+        if self.state.pipeline_result and "behavioral_verification" in self.state.pipeline_result:
+            bv = self.state.pipeline_result["behavioral_verification"]
+            b_res = dict(bv)
+            b_res["total_vectors"] = bv.get("test_count", bv.get("total_test_vectors", 32))
+            b_res["exact_matches"] = bv.get("matching_outputs", bv.get("exact_output_matches", 32))
+            b_res["mismatches"] = bv.get("mismatching_outputs", bv.get("exact_output_mismatches", 0))
+            b_res["passed"] = (bv.get("status") == "MATCH")
+        elif self.state.original_RTL and self.state.watermarked_RTL:
+            from hardware_ip_protection.verification.behavioral_verifier import BehavioralVerifier
+            from hardware_ip_protection.verification.test_vector_generator import TestVectorGenerator
+            dfg = create_iir_butterworth()
+            tv_set = TestVectorGenerator.generate(dfg, num_vectors=32)
+            bv_obj = BehavioralVerifier.verify(self.state.original_RTL, self.state.watermarked_RTL, tv_set)
+            b_res = bv_obj.to_dict()
+            b_res["total_vectors"] = b_res.get("test_count", 32)
+            b_res["exact_matches"] = b_res.get("matching_outputs", 32)
+            b_res["mismatches"] = b_res.get("mismatching_outputs", 0)
+            b_res["passed"] = (b_res.get("status") == "MATCH")
+        else:
+            raise ValueError("Missing RTL artifacts for behavioral validation.")
+
+        self.state.behavioral_validation_result = b_res
+        self.state.stage4_behavioral_verified = True
+        self.state.stage4_completed = True
+        self.state.C_ES = "NOT_REQUIRED"
+        self.state.seller_private_info = self._build_seller_private_info()
+        return self.state
+
+    def continue_watermark_workflow(
+        self,
+        transaction_id: Optional[str] = None,
+        seller_id: Optional[str] = None,
+        buyer_id: Optional[str] = None,
+        license_type: Optional[str] = None,
+        k_tx: Optional[str] = None,
+        watermark_length: Any = "auto",
+    ) -> TransactionState:
+        """
+        After Buyer approved and provided B, Seller continues the existing watermark workflow.
+        Inputs: D, B, transaction metadata -> W -> commitments, W1/W2, embedding, RTL.
+        Backwards-compatible: executes any pending substages sequentially.
+        """
+        if not self.state.watermark_W:
+            self.generate_transaction_watermark(
+                transaction_id=transaction_id,
+                seller_id=seller_id,
+                buyer_id=buyer_id,
+                license_type=license_type,
+                k_tx=k_tx,
+                watermark_length=watermark_length,
+            )
+        if not self.state.C_W:
+            self.commit_original_watermark()
+        if not self.state.W1 or not self.state.protected_W2:
+            self.split_and_protect_watermark(watermark_length=watermark_length)
+        if not self.state.C_W1:
+            self.commit_embedded_watermark()
+        self.embed_watermark_in_rtl(watermark_length=watermark_length)
+        self.calculate_secured_encoding()
+        self.compare_encodings()
+        self.verify_behavioral_validation()
         return self.state

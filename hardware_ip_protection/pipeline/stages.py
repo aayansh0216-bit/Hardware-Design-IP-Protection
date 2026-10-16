@@ -220,7 +220,11 @@ class WatermarkCommitmentStage(PipelineStage):
         pe = PedersenEngine()
         # Commit over the COMPLETE canonical 256-bit watermark (Section 9 & 24, Part H)
         commitment_data = getattr(watermark, "canonical_bitstream", watermark.bitstream)
-        commitment, r_w = pe.commit(commitment_data)
+        if ctx.get("watermark_commitment") is not None and ctx.get("watermark_blinding_factor") is not None:
+            commitment = ctx["watermark_commitment"]
+            r_w = ctx["watermark_blinding_factor"]
+        else:
+            commitment, r_w = pe.commit(commitment_data)
         ctx["watermark_commitment"] = commitment
         ctx["watermark_blinding_factor"] = r_w
         return ctx

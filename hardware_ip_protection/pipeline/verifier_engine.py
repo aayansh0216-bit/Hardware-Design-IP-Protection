@@ -276,6 +276,7 @@ class VerifierEngine:
                 "sha256_digest": rtl_hash,
                 "lines_of_code": line_count,
                 "preview": rtl[:300] + "...",
+                "synthesizable_verilog_code": rtl,
                 "status": "LOADED",
             },
             stage2_verification={

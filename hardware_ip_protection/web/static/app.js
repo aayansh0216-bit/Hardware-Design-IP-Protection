@@ -229,14 +229,14 @@ function initTransactionWorkflow() {
         });
     });
 
-    // STEP 4: Continue Watermark Workflow
+    // SUBSTAGE 2B: Generate Transaction Watermark
     const btnContinueWm = document.getElementById("btnSellerContinueWatermark");
     if (btnContinueWm) {
         btnContinueWm.addEventListener("click", async () => {
             btnContinueWm.disabled = true;
-            btnContinueWm.innerHTML = `<span>Embedding Watermark into RTL...</span>`;
+            btnContinueWm.innerHTML = `<span>Generating Watermark W via HKDF-SHA256...</span>`;
             try {
-                const res = await fetch("/api/transaction/continue_watermark", {
+                const res = await fetch("/api/transaction/generate_watermark", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -252,25 +252,609 @@ function initTransactionWorkflow() {
                     const data = await res.json();
                     currentTransactionState = data.state;
                     syncTransactionStateToUI(currentTransactionState);
-                    if (data.state.pipeline_result) {
-                        currentProtectionData = data.state.pipeline_result;
-                        renderProtectionResults(data.state.pipeline_result);
-                        syncToDisputeTab(data.state.pipeline_result);
-                    }
                 } else {
                     const err = await res.json();
-                    alert(`Watermark embedding failed: ${err.detail || "Server error"}`);
+                    alert(`Watermark generation failed: ${err.detail || "Server error"}`);
                 }
             } catch (err) {
-                console.error("Failed to continue watermark workflow:", err);
-                alert("Network error executing watermark workflow.");
+                console.error("Failed to generate transaction watermark:", err);
+                alert("Network error executing watermark generation.");
             } finally {
                 btnContinueWm.disabled = false;
                 btnContinueWm.innerHTML = `
                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                     </svg>
-                    <span>Continue Existing Watermark Workflow</span>`;
+                    <span>Generate Transaction Watermark</span>`;
+            }
+        });
+    }
+
+    // --- SELLER PROFILE WORKFLOW NAVIGATOR & PROGRESSIVE STAGE SWITCHING ---
+    window.switchSellerStage = function(stageId) {
+        const navItems = document.querySelectorAll("#sellerWorkflowNav .seller-nav-item");
+        const stageCards = [
+            { id: "1", el: document.getElementById("sellerStage1Card") },
+            { id: "2", el: document.getElementById("sellerStage2Card") },
+            { id: "3", el: document.getElementById("sellerStage3Card") },
+            { id: "4", el: document.getElementById("sellerStage4Card") },
+            { id: "commitments", el: document.getElementById("sellerCommitmentsCard") },
+            { id: "evidence", el: document.getElementById("sellerEvidenceCard") },
+        ];
+
+        // Highlight matching nav item
+        navItems.forEach(item => {
+            if (item.dataset.sellerStage === stageId) {
+                item.classList.add("active");
+            } else {
+                item.classList.remove("active");
+            }
+        });
+
+        // Toggle stage card visibility
+        stageCards.forEach(sc => {
+            if (sc.el) {
+                sc.el.style.display = (sc.id === stageId) ? "block" : "none";
+            }
+        });
+
+        // Ensure subviews are properly activated
+        if (stageId === "3") {
+            const viewCig = document.getElementById("viewCig");
+            if (viewCig) viewCig.style.display = "block";
+            if (currentProtectionData && currentProtectionData.cig) {
+                drawCIG("cigCanvas", currentProtectionData.cig, currentProtectionData.register_allocation.variable_to_register);
+            }
+        } else if (stageId === "4") {
+            const viewVerilog = document.getElementById("viewVerilog");
+            if (viewVerilog) viewVerilog.style.display = "block";
+        } else if (stageId === "commitments") {
+            const viewComm = document.getElementById("viewCommitments");
+            if (viewComm) viewComm.style.display = "block";
+            const viewEnc = document.getElementById("viewStructuralEncoding");
+            if (viewEnc) viewEnc.style.display = "none";
+        } else if (stageId === "evidence") {
+            const viewEvid = document.getElementById("viewSellerPrivateEvidence");
+            if (viewEvid) viewEvid.style.display = "block";
+        }
+
+        // Always scroll to top of stage area
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    // Attach click listeners to all seller navigator buttons
+    const sellerNavItems = document.querySelectorAll("#sellerWorkflowNav .seller-nav-item");
+    sellerNavItems.forEach(item => {
+        item.addEventListener("click", () => {
+            const targetStage = item.dataset.sellerStage;
+            // Validate prerequisites
+            if (targetStage === "2" && (!currentTransactionState || !currentTransactionState.design_encoding_D)) {
+                alert("Stage 2 is pending Stage 1: Please calculate Original Design Encoding D first.");
+                return;
+            }
+            if (targetStage === "3" && (!currentTransactionState || !currentTransactionState.C_W1)) {
+                alert("Stage 3 is pending Stage 2: Please complete Substage 2E (Commit Embedded Watermark) first.");
+                return;
+            }
+            if (targetStage === "4" && (!currentTransactionState || !currentTransactionState.watermarked_RTL)) {
+                alert("Stage 4 is pending Stage 3: Please complete Watermark Embedding first.");
+                return;
+            }
+            window.switchSellerStage(targetStage);
+        });
+    });
+
+    // Substage navigation buttons: Stage 1
+    const btnProceedToCommitD = document.getElementById("btnProceedToCommitD");
+    if (btnProceedToCommitD) {
+        btnProceedToCommitD.addEventListener("click", () => {
+            const box1A = document.getElementById("sellerSubstage1ABox");
+            if (box1A) {
+                box1A.classList.remove("active");
+                box1A.classList.add("collapsed");
+            }
+            const box1B = document.getElementById("sellerSubstage1BBox");
+            if (box1B) {
+                box1B.classList.remove("collapsed");
+                box1B.classList.add("active");
+            }
+            const s1b = document.getElementById("sellerSubstage1BContent");
+            if (s1b) s1b.style.display = "block";
+            const badge1b = document.getElementById("sellerSubstage1BBadge");
+            if (badge1b) {
+                badge1b.textContent = "Committed (NIST P-256)";
+                badge1b.className = "badge badge-success";
+            }
+        });
+    }
+
+    const btnAdvanceToStage2 = document.getElementById("btnAdvanceToStage2");
+    if (btnAdvanceToStage2) {
+        btnAdvanceToStage2.addEventListener("click", () => {
+            const box1B = document.getElementById("sellerSubstage1BBox");
+            if (box1B) {
+                box1B.classList.remove("active");
+                box1B.classList.add("collapsed");
+            }
+            window.switchSellerStage("2");
+        });
+    }
+
+    // Substage navigation and action handlers: Stage 2
+    const btnProceedTo2C = document.getElementById("btnProceedTo2C");
+    if (btnProceedTo2C) {
+        btnProceedTo2C.addEventListener("click", () => {
+            const b2B = document.getElementById("sellerSubstage2BBox");
+            if (b2B) {
+                b2B.classList.remove("active");
+                b2B.classList.add("collapsed");
+            }
+            const b2C = document.getElementById("sellerSubstage2CBox");
+            if (b2C) {
+                b2C.classList.remove("collapsed");
+                b2C.classList.add("active");
+                b2C.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnCommitW = document.getElementById("btnCommitW");
+    if (btnCommitW) {
+        btnCommitW.addEventListener("click", async () => {
+            btnCommitW.disabled = true;
+            btnCommitW.innerHTML = `<span>Computing Pedersen Commitment C_W...</span>`;
+            try {
+                const res = await fetch("/api/transaction/commit_watermark", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Commitment C_W failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to commit watermark:", err);
+                alert("Network error committing watermark.");
+            } finally {
+                btnCommitW.disabled = false;
+                btnCommitW.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    <span>Commit Original Watermark (C_W)</span>`;
+            }
+        });
+    }
+
+    const btnProceedToSplit = document.getElementById("btnProceedToSplit");
+    if (btnProceedToSplit) {
+        btnProceedToSplit.addEventListener("click", () => {
+            const b2C = document.getElementById("sellerSubstage2CBox");
+            if (b2C) {
+                b2C.classList.remove("active");
+                b2C.classList.add("collapsed");
+            }
+            const b2D = document.getElementById("sellerSubstage2DBox");
+            if (b2D) {
+                b2D.classList.remove("collapsed");
+                b2D.classList.add("active");
+                b2D.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnSplitWatermark = document.getElementById("btnSplitWatermark");
+    if (btnSplitWatermark) {
+        btnSplitWatermark.addEventListener("click", async () => {
+            btnSplitWatermark.disabled = true;
+            btnSplitWatermark.innerHTML = `<span>Splitting Watermark into W1 & W2...</span>`;
+            try {
+                const res = await fetch("/api/transaction/split_watermark", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Watermark splitting failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to split watermark:", err);
+                alert("Network error splitting watermark.");
+            } finally {
+                btnSplitWatermark.disabled = false;
+                btnSplitWatermark.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                    </svg>
+                    <span>Split and Protect Watermark (W1 &amp; W2)</span>`;
+            }
+        });
+    }
+
+    const btnProceedTo2E = document.getElementById("btnProceedTo2E");
+    if (btnProceedTo2E) {
+        btnProceedTo2E.addEventListener("click", () => {
+            const b2D = document.getElementById("sellerSubstage2DBox");
+            if (b2D) {
+                b2D.classList.remove("active");
+                b2D.classList.add("collapsed");
+            }
+            const b2E = document.getElementById("sellerSubstage2EBox");
+            if (b2E) {
+                b2E.classList.remove("collapsed");
+                b2E.classList.add("active");
+                b2E.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnCommitW1 = document.getElementById("btnCommitW1");
+    if (btnCommitW1) {
+        btnCommitW1.addEventListener("click", async () => {
+            btnCommitW1.disabled = true;
+            btnCommitW1.innerHTML = `<span>Computing Pedersen Commitment C_W1...</span>`;
+            try {
+                const res = await fetch("/api/transaction/commit_embedded_watermark", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Commitment C_W1 failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to commit embedded watermark:", err);
+                alert("Network error committing embedded watermark.");
+            } finally {
+                btnCommitW1.disabled = false;
+                btnCommitW1.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    <span>Commit Embedded Watermark (C_W1)</span>`;
+            }
+        });
+    }
+
+    const btnAdvanceToStage3 = document.getElementById("btnAdvanceToStage3");
+    if (btnAdvanceToStage3) {
+        btnAdvanceToStage3.addEventListener("click", () => {
+            const b2E = document.getElementById("sellerSubstage2EBox");
+            if (b2E) {
+                b2E.classList.remove("active");
+                b2E.classList.add("collapsed");
+            }
+            window.switchSellerStage("3");
+        });
+    }
+
+    // STAGE 3: Embed Watermark in RTL (Decoupled Single User Action)
+    const btnEmbedWatermark = document.getElementById("btnEmbedWatermark");
+    if (btnEmbedWatermark) {
+        btnEmbedWatermark.addEventListener("click", async () => {
+            btnEmbedWatermark.disabled = true;
+            btnEmbedWatermark.innerHTML = `<span>Synthesizing Protected RTL &amp; Embedding Watermark...</span>`;
+            try {
+                const res = await fetch("/api/transaction/embed_watermark", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ watermark_length: "auto" })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    if (data.state.pipeline_result) {
+                        currentProtectionData = data.state.pipeline_result;
+                        renderProtectionResults(data.state.pipeline_result);
+                        syncToDisputeTab(data.state.pipeline_result);
+                    }
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Watermark embedding failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to embed watermark in RTL:", err);
+                alert("Network error embedding watermark in RTL.");
+            } finally {
+                btnEmbedWatermark.disabled = false;
+                btnEmbedWatermark.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <span>Embed Watermark in RTL</span>`;
+            }
+        });
+    }
+
+    // Link from Commitments to Stage 1 Structural Encoding
+    const btnLinkStage1 = document.getElementById("btnLinkToStage1Encoding");
+    if (btnLinkStage1) {
+        btnLinkStage1.addEventListener("click", () => {
+            window.switchSellerStage("1");
+            const encBox = document.getElementById("sellerStage1EncodingDetails");
+            if (encBox) encBox.style.display = "block";
+            const viewEnc = document.getElementById("viewStructuralEncoding");
+            if (viewEnc) {
+                viewEnc.style.display = "block";
+                const btnToggle = document.getElementById("btnToggleStructuralEncoding");
+                if (btnToggle) {
+                    btnToggle.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg><span>Hide Supporting Structural Encoding Table</span>`;
+                }
+                viewEnc.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    // Stage 3 view buttons
+    const stage3VizBtns = document.querySelectorAll("#sellerStage3Card .viz-tab-btn");
+    stage3VizBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            stage3VizBtns.forEach(b => b.classList.remove("active"));
+            const views = ["viewCig", "viewMapping", "viewTiming"];
+            views.forEach(vId => {
+                const el = document.getElementById(vId);
+                if (el) el.style.display = "none";
+            });
+            btn.classList.add("active");
+            const target = btn.dataset.view;
+            const targetEl = document.getElementById(target);
+            if (targetEl) targetEl.style.display = "block";
+            if (target === "viewCig" && currentProtectionData && currentProtectionData.cig) {
+                drawCIG("cigCanvas", currentProtectionData.cig, currentProtectionData.register_allocation.variable_to_register);
+            }
+        });
+    });
+
+    const btnAdvanceToStage4 = document.getElementById("btnAdvanceToStage4");
+    if (btnAdvanceToStage4) {
+        btnAdvanceToStage4.addEventListener("click", () => {
+            window.switchSellerStage("4");
+        });
+    }
+
+    // --- STAGE 4 SEQUENTIAL SUBSTAGE PROGRESSION HANDLERS ---
+    const btnProceedTo4B = document.getElementById("btnProceedTo4B");
+    if (btnProceedTo4B) {
+        btnProceedTo4B.addEventListener("click", () => {
+            const b4A = document.getElementById("sellerSubstage4ABox");
+            if (b4A) {
+                b4A.classList.remove("active");
+                b4A.classList.add("collapsed");
+            }
+            const b4B = document.getElementById("sellerSubstage4BBox");
+            if (b4B) {
+                b4B.classList.remove("collapsed");
+                b4B.classList.add("active");
+                b4B.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnCalculateEs = document.getElementById("btnCalculateEs");
+    if (btnCalculateEs) {
+        btnCalculateEs.addEventListener("click", async () => {
+            btnCalculateEs.disabled = true;
+            btnCalculateEs.innerHTML = `<span>Calculating Secured Design Encoding (E_S)...</span>`;
+            try {
+                const res = await fetch("/api/transaction/calculate_secured_encoding", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Calculation failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to calculate secured encoding E_S:", err);
+                alert("Network error calculating secured design encoding E_S.");
+            } finally {
+                btnCalculateEs.disabled = false;
+                btnCalculateEs.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                    </svg>
+                    <span>Calculate Secured Encoding (E_S)</span>`;
+            }
+        });
+    }
+
+    const btnProceedTo4C = document.getElementById("btnProceedTo4C");
+    if (btnProceedTo4C) {
+        btnProceedTo4C.addEventListener("click", () => {
+            const b4B = document.getElementById("sellerSubstage4BBox");
+            if (b4B) {
+                b4B.classList.remove("active");
+                b4B.classList.add("collapsed");
+            }
+            const b4C = document.getElementById("sellerSubstage4CBox");
+            if (b4C) {
+                b4C.classList.remove("collapsed");
+                b4C.classList.add("active");
+                b4C.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnRunCompareEncodings = document.getElementById("btnRunCompareEncodings");
+    if (btnRunCompareEncodings) {
+        btnRunCompareEncodings.addEventListener("click", async () => {
+            btnRunCompareEncodings.disabled = true;
+            btnRunCompareEncodings.innerHTML = `<span>Comparing Encodings (E_S vs D)...</span>`;
+            try {
+                const res = await fetch("/api/transaction/compare_encodings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Comparison failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to compare encodings:", err);
+                alert("Network error comparing encodings.");
+            } finally {
+                btnRunCompareEncodings.disabled = false;
+                btnRunCompareEncodings.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                    </svg>
+                    <span>Compare Encodings (E_S vs D)</span>`;
+            }
+        });
+    }
+
+    const btnProceedTo4D = document.getElementById("btnProceedTo4D");
+    if (btnProceedTo4D) {
+        btnProceedTo4D.addEventListener("click", () => {
+            const b4C = document.getElementById("sellerSubstage4CBox");
+            if (b4C) {
+                b4C.classList.remove("active");
+                b4C.classList.add("collapsed");
+            }
+            const b4D = document.getElementById("sellerSubstage4DBox");
+            if (b4D) {
+                b4D.classList.remove("collapsed");
+                b4D.classList.add("active");
+                b4D.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnRunBehavioralValidation = document.getElementById("btnRunBehavioralValidation");
+    if (btnRunBehavioralValidation) {
+        btnRunBehavioralValidation.addEventListener("click", async () => {
+            btnRunBehavioralValidation.disabled = true;
+            btnRunBehavioralValidation.innerHTML = `<span>Running Behavioral Simulation Validation...</span>`;
+            try {
+                const res = await fetch("/api/transaction/verify_behavioral", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    currentTransactionState = data.state;
+                    syncTransactionStateToUI(currentTransactionState);
+                } else {
+                    const err = await res.json();
+                    alert(`Behavioral validation failed: ${err.detail || "Server error"}`);
+                }
+            } catch (err) {
+                console.error("Failed to run behavioral validation:", err);
+                alert("Network error running behavioral validation.");
+            } finally {
+                btnRunBehavioralValidation.disabled = false;
+                btnRunBehavioralValidation.innerHTML = `
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span>Run Behavioral Simulation Validation</span>`;
+            }
+        });
+    }
+
+    const btnProceedTo4E = document.getElementById("btnProceedTo4E");
+    if (btnProceedTo4E) {
+        btnProceedTo4E.addEventListener("click", () => {
+            const b4D = document.getElementById("sellerSubstage4DBox");
+            if (b4D) {
+                b4D.classList.remove("active");
+                b4D.classList.add("collapsed");
+            }
+            const b4E = document.getElementById("sellerSubstage4EBox");
+            if (b4E) {
+                b4E.classList.remove("collapsed");
+                b4E.classList.add("active");
+                b4E.scrollIntoView({ behavior: "smooth" });
+            }
+        });
+    }
+
+    const btnAdvanceToCommitments = document.getElementById("btnAdvanceToCommitments");
+    if (btnAdvanceToCommitments) {
+        btnAdvanceToCommitments.addEventListener("click", () => {
+            window.switchSellerStage("commitments");
+        });
+    }
+
+    // --- SETUP COLLAPSIBLE DISCLOSURE TOGGLING ON ALL SUBSTAGE HEADERS ---
+    document.querySelectorAll(".seller-substage-header").forEach(hdr => {
+        hdr.addEventListener("click", (e) => {
+            if (e.target.closest("button") && !e.target.closest(".btn-substage-toggle")) {
+                return;
+            }
+            const parentBox = hdr.closest(".seller-substage-box");
+            if (parentBox) {
+                parentBox.classList.toggle("collapsed");
+            }
+        });
+    });
+
+    // Section A: Toggle Structural Encoding Table
+    const btnToggleEnc = document.getElementById("btnToggleStructuralEncoding");
+    if (btnToggleEnc) {
+        btnToggleEnc.addEventListener("click", () => {
+            const viewEnc = document.getElementById("viewStructuralEncoding");
+            if (viewEnc) {
+                const isHidden = (viewEnc.style.display === "none");
+                viewEnc.style.display = isHidden ? "block" : "none";
+                btnToggleEnc.innerHTML = isHidden ?
+                    `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg><span>Hide Supporting Structural Encoding Table</span>` :
+                    `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg><span>Inspect Supporting Structural Encoding Table (143 bits)</span>`;
+            }
+        });
+    }
+
+    // Verilog copy and download helpers
+    const btnCopyRTL = document.getElementById("btnCopyProtectedVerilog");
+    if (btnCopyRTL) {
+        btnCopyRTL.addEventListener("click", () => {
+            const code = document.getElementById("verilogCodeBox")?.textContent || "";
+            if (code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    const original = btnCopyRTL.textContent;
+                    btnCopyRTL.textContent = "Copied!";
+                    setTimeout(() => { btnCopyRTL.textContent = original; }, 2000);
+                });
+            }
+        });
+    }
+
+    const btnDownloadRTL = document.getElementById("btnDownloadProtectedVerilog");
+    if (btnDownloadRTL) {
+        btnDownloadRTL.addEventListener("click", () => {
+            const code = document.getElementById("verilogCodeBox")?.textContent || "";
+            if (code) {
+                const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "iir_butterworth_protected.v";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
             }
         });
     }
@@ -322,33 +906,180 @@ function syncTransactionStateToUI(st) {
     const sellerCD = document.getElementById("sellerCommitmentCD");
     const btnReqBuyer = document.getElementById("btnSellerRequestBuyer");
 
+    // Update Seller Navigator status badges & indicators
+    const sellerNavStatus1 = document.getElementById("sellerNavStatus1");
+    const sellerNavStatus2 = document.getElementById("sellerNavStatus2");
+    const sellerNavStatus3 = document.getElementById("sellerNavStatus3");
+    const sellerNavStatus4 = document.getElementById("sellerNavStatus4");
+    const sellerNavItem1 = document.getElementById("sellerNavItem1");
+    const sellerNavItem2 = document.getElementById("sellerNavItem2");
+    const sellerNavItem3 = document.getElementById("sellerNavItem3");
+    const sellerNavItem4 = document.getElementById("sellerNavItem4");
+    const sellerOverallProgressBadge = document.getElementById("sellerOverallProgressBadge");
+
+    if (st.stage4_completed) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Pipeline Completed (4/4)";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Completed (W & W1)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Embedded & Allocated";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "RTL Verified (E_S = D)";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.add("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.add("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.add("completed");
+    } else if (st.watermarked_RTL) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 4 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Completed (W & W1)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Embedded & Allocated";
+        if (sellerNavStatus4) {
+            if (st.stage4_behavioral_verified) sellerNavStatus4.textContent = "Behavioral Verified";
+            else if (st.stage4_encodings_compared) sellerNavStatus4.textContent = "Encodings Validated";
+            else if (st.stage4_es_calculated) sellerNavStatus4.textContent = "Secured Encoding Calculated";
+            else sellerNavStatus4.textContent = "Ready for Validation";
+        }
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.add("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.add("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else if (st.C_W1) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 2 Completed (Ready to Embed)";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Completed (W & W1)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Ready to Embed";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.add("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else if (st.W1) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 2 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Split (32b / 224b)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Pending Stage 2";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.remove("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else if (st.C_W) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 2 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Committed (C_W)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Pending Stage 2";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.remove("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else if (st.watermark_W) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 2 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Watermark Generated (256b)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Pending Stage 2";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.remove("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else if (st.buyer_approved) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 2 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Buyer Received (555b)";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Pending Stage 2";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.remove("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else if (st.design_encoding_D) {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 2 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Completed (143 bits)";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = (st.buyer_request_status && st.buyer_request_status.includes("Pending")) ? "Pending Buyer Approval" : "Ready for Request";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Pending Stage 2";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.add("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.remove("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    } else {
+        if (sellerOverallProgressBadge) sellerOverallProgressBadge.textContent = "Stage 1 of 4";
+        if (sellerNavStatus1) sellerNavStatus1.textContent = "Ready to Calculate";
+        if (sellerNavStatus2) sellerNavStatus2.textContent = "Pending Stage 1";
+        if (sellerNavStatus3) sellerNavStatus3.textContent = "Pending Stage 2";
+        if (sellerNavStatus4) sellerNavStatus4.textContent = "Pending Stage 3";
+        if (sellerNavItem1) sellerNavItem1.classList.remove("completed");
+        if (sellerNavItem2) sellerNavItem2.classList.remove("completed");
+        if (sellerNavItem3) sellerNavItem3.classList.remove("completed");
+        if (sellerNavItem4) sellerNavItem4.classList.remove("completed");
+    }
+
+    // Stage 1 Displays
+    const sellerSubstage1ABox = document.getElementById("sellerSubstage1ABox");
+    const sellerSubstage1AControls = document.getElementById("sellerSubstage1AControls");
+    const sellerSubstage1ABadge = document.getElementById("sellerSubstage1ABadge");
+    const sellerSubstage1BBox = document.getElementById("sellerSubstage1BBox");
+    const sellerSubstage1BBadge = document.getElementById("sellerSubstage1BBadge");
+    const sellerSubstage1BContent = document.getElementById("sellerSubstage1BContent");
+
+    // Action button: Hide when design encoding D is generated
+    const btnEncodeD = document.getElementById("btnSellerEncodeD");
+    if (btnEncodeD) {
+        btnEncodeD.style.display = st.design_encoding_D ? "none" : "inline-flex";
+    }
+
     if (st.design_encoding_D) {
         if (badgeStep2) {
             badgeStep2.textContent = `Generated (${st.design_encoding_D.length} bits)`;
             badgeStep2.className = "badge badge-success";
         }
-        if (sellerSummaryBox) sellerSummaryBox.style.display = "block";
         if (sellerDLength) sellerDLength.textContent = `${st.design_encoding_D.length} bits`;
         if (sellerCD) sellerCD.textContent = st.C_D || "--";
         if (btnReqBuyer && st.buyer_request_status === "Not Requested") {
             btnReqBuyer.disabled = false;
         }
+        if (sellerSubstage1ABadge) {
+            sellerSubstage1ABadge.textContent = `Calculated (${st.design_encoding_D.length}b)`;
+            sellerSubstage1ABadge.className = "badge badge-success";
+        }
 
-        if (st.design_encoding_details) {
-            renderStructuralEncodingTab1(st.design_encoding_details);
-            const resultsArea = document.getElementById("protectionResults");
-            if (resultsArea && resultsArea.style.display === "none" && !st.watermark_W) {
-                resultsArea.style.display = "block";
-                const encTabBtn = document.querySelector('[data-view="viewStructuralEncoding"]');
-                if (encTabBtn) encTabBtn.click();
+        const hasProgressedPastStage1 = Boolean(st.buyer_approved || st.watermark_W || (st.buyer_request_status && st.buyer_request_status !== "Not Requested"));
+
+        if (hasProgressedPastStage1) {
+            if (sellerSubstage1ABox) sellerSubstage1ABox.className = "seller-substage-box collapsed";
+            if (sellerSubstage1BBox) sellerSubstage1BBox.className = "seller-substage-box collapsed";
+            if (sellerSubstage1BBadge) {
+                sellerSubstage1BBadge.textContent = "Committed (C_D)";
+                sellerSubstage1BBadge.className = "badge badge-success";
+            }
+            if (sellerSubstage1BContent) sellerSubstage1BContent.style.display = "none";
+        } else {
+            // In Stage 1: 1A result is visible, 1B collapsed until Commit clicked
+            if (sellerSubstage1AControls) sellerSubstage1AControls.style.display = "none";
+            if (sellerSummaryBox) sellerSummaryBox.style.display = "block";
+            if (sellerSubstage1ABox) sellerSubstage1ABox.className = "seller-substage-box active";
+            if (sellerSubstage1BBox) sellerSubstage1BBox.className = "seller-substage-box collapsed";
+            if (sellerSubstage1BBadge) {
+                sellerSubstage1BBadge.textContent = "Ready to Commit";
+                sellerSubstage1BBadge.className = "badge badge-warning";
             }
         }
+        if (st.design_encoding_details) {
+            renderStructuralEncodingTab1(st.design_encoding_details);
+            const encBox = document.getElementById("sellerStage1EncodingDetails");
+            if (encBox) encBox.style.display = "block";
+        }
     } else {
+        const encBox = document.getElementById("sellerStage1EncodingDetails");
+        if (encBox) encBox.style.display = "none";
         if (badgeStep2) {
             badgeStep2.textContent = "Ready to Generate";
             badgeStep2.className = "badge badge-warning";
         }
+        if (sellerSubstage1AControls) sellerSubstage1AControls.style.display = "block";
         if (sellerSummaryBox) sellerSummaryBox.style.display = "none";
+        if (sellerSubstage1ABox) sellerSubstage1ABox.className = "seller-substage-box active";
+        if (sellerSubstage1BBox) sellerSubstage1BBox.className = "seller-substage-box collapsed";
         if (btnReqBuyer) btnReqBuyer.disabled = true;
     }
 
@@ -386,31 +1117,419 @@ function syncTransactionStateToUI(st) {
 
     if (sellerBuyerApprovedBox) {
         sellerBuyerApprovedBox.style.display = st.buyer_approved ? "block" : "none";
-        if (sellerCB) sellerCB.textContent = st.C_B || "--";
     }
 
     if (btnReqBuyer) {
+        btnReqBuyer.style.display = (st.buyer_request_status && st.buyer_request_status !== "Not Requested") ? "none" : "inline-flex";
         btnReqBuyer.disabled = (st.buyer_request_status !== "Not Requested" || !st.design_encoding_D);
     }
 
+    // Stage 2 Outputs Populator & Independent Substage Management
     const btnContinueWm = document.getElementById("btnSellerContinueWatermark");
     const sellerStep4Badge = document.getElementById("sellerStep4Badge");
+    const sellerWmGeneratedBox = document.getElementById("sellerWmGeneratedBox");
+    const sellerStageWBitstream = document.getElementById("sellerStageWBitstream");
+    const sellerWmBitLength = document.getElementById("sellerWmBitLength");
 
-    if (btnContinueWm) {
-        btnContinueWm.disabled = !st.buyer_approved;
-    }
+    const sellerSubstage2ABox = document.getElementById("sellerSubstage2ABox");
+    const sellerSubstage2BBox = document.getElementById("sellerSubstage2BBox");
+    const sellerSubstage2CBox = document.getElementById("sellerSubstage2CBox");
+    const sellerSubstage2DBox = document.getElementById("sellerSubstage2DBox");
+    const sellerSubstage2EBox = document.getElementById("sellerSubstage2EBox");
 
-    if (sellerStep4Badge) {
-        if (st.watermark_W) {
-            sellerStep4Badge.textContent = "Protected & Embedded";
+    const btnCommitW = document.getElementById("btnCommitW");
+    const badgeStep2C = document.getElementById("badgeStep2C");
+    const sellerSubstage2CContent = document.getElementById("sellerSubstage2CContent");
+    const sellerStageCwHex = document.getElementById("sellerStageCwHex");
+
+    const btnSplitWm = document.getElementById("btnSplitWatermark");
+    const badgeStep2D = document.getElementById("badgeStep2D");
+    const sellerSubstage2DContent = document.getElementById("sellerSubstage2DContent");
+    const sellerStageW1Bitstream = document.getElementById("sellerStageW1Bitstream");
+    const sellerStageW2Bitstream = document.getElementById("sellerStageW2Bitstream");
+
+    const btnCommitW1 = document.getElementById("btnCommitW1");
+    const badgeStep2E = document.getElementById("badgeStep2E");
+    const sellerSubstage2EContent = document.getElementById("sellerSubstage2EContent");
+    const sellerStageCw1Hex = document.getElementById("sellerStageCw1Hex");
+    const btnAdvanceToStage3 = document.getElementById("btnAdvanceToStage3");
+
+    // Substage 2B: Generate Watermark W
+    if (st.watermark_W) {
+        if (sellerStep4Badge) {
+            sellerStep4Badge.textContent = "Generated (256 bits)";
             sellerStep4Badge.className = "badge badge-success";
-        } else if (st.buyer_approved) {
-            sellerStep4Badge.textContent = "Ready to Embed";
+        }
+        if (sellerWmGeneratedBox) sellerWmGeneratedBox.style.display = "block";
+        if (sellerStageWBitstream) sellerStageWBitstream.textContent = st.watermark_W;
+        if (sellerWmBitLength) sellerWmBitLength.textContent = `${st.watermark_W.length} bits`;
+        if (btnContinueWm) {
+            btnContinueWm.style.display = "none";
+            btnContinueWm.disabled = true;
+        }
+    } else if (st.buyer_approved) {
+        if (sellerStep4Badge) {
+            sellerStep4Badge.textContent = "Ready to Generate";
             sellerStep4Badge.className = "badge badge-warning";
-        } else {
+        }
+        if (sellerWmGeneratedBox) sellerWmGeneratedBox.style.display = "none";
+        if (btnContinueWm) {
+            btnContinueWm.style.display = "inline-flex";
+            btnContinueWm.disabled = false;
+        }
+    } else {
+        if (sellerStep4Badge) {
             sellerStep4Badge.textContent = "Awaiting Buyer";
             sellerStep4Badge.className = "badge badge-v1";
         }
+        if (sellerWmGeneratedBox) sellerWmGeneratedBox.style.display = "none";
+        if (btnContinueWm) {
+            btnContinueWm.style.display = "inline-flex";
+            btnContinueWm.disabled = true;
+        }
+    }
+
+    // Substage 2C: Commit Original Watermark C_W
+    if (st.C_W) {
+        if (badgeStep2C) {
+            badgeStep2C.textContent = "Committed (NIST P-256)";
+            badgeStep2C.className = "badge badge-success";
+        }
+        if (sellerStageCwHex) sellerStageCwHex.textContent = st.C_W;
+        if (sellerSubstage2CContent) sellerSubstage2CContent.style.display = "block";
+        if (btnCommitW) {
+            btnCommitW.style.display = "none";
+            btnCommitW.disabled = true;
+        }
+    } else if (st.watermark_W) {
+        if (badgeStep2C) {
+            badgeStep2C.textContent = "Ready to Commit";
+            badgeStep2C.className = "badge badge-warning";
+        }
+        if (sellerSubstage2CContent) sellerSubstage2CContent.style.display = "none";
+        if (btnCommitW) {
+            btnCommitW.style.display = "inline-flex";
+            btnCommitW.disabled = false;
+        }
+    } else {
+        if (badgeStep2C) {
+            badgeStep2C.textContent = "Awaiting Generation";
+            badgeStep2C.className = "badge badge-v1";
+        }
+        if (sellerSubstage2CContent) sellerSubstage2CContent.style.display = "none";
+        if (btnCommitW) {
+            btnCommitW.style.display = "inline-flex";
+            btnCommitW.disabled = true;
+        }
+    }
+
+    // Substage 2D: Split and Protect Watermark (W1 & W2)
+    if (st.W1 && st.protected_W2) {
+        if (badgeStep2D) {
+            badgeStep2D.textContent = "Split Validated (32b / 224b)";
+            badgeStep2D.className = "badge badge-success";
+        }
+        if (sellerStageW1Bitstream) sellerStageW1Bitstream.textContent = st.W1;
+        if (sellerStageW2Bitstream) sellerStageW2Bitstream.textContent = st.protected_W2;
+        if (sellerSubstage2DContent) sellerSubstage2DContent.style.display = "block";
+        if (btnSplitWm) {
+            btnSplitWm.style.display = "none";
+            btnSplitWm.disabled = true;
+        }
+    } else if (st.C_W) {
+        if (badgeStep2D) {
+            badgeStep2D.textContent = "Ready to Split";
+            badgeStep2D.className = "badge badge-warning";
+        }
+        if (sellerSubstage2DContent) sellerSubstage2DContent.style.display = "none";
+        if (btnSplitWm) {
+            btnSplitWm.style.display = "inline-flex";
+            btnSplitWm.disabled = false;
+        }
+    } else {
+        if (badgeStep2D) {
+            badgeStep2D.textContent = "Awaiting C_W";
+            badgeStep2D.className = "badge badge-v1";
+        }
+        if (sellerSubstage2DContent) sellerSubstage2DContent.style.display = "none";
+        if (btnSplitWm) {
+            btnSplitWm.style.display = "inline-flex";
+            btnSplitWm.disabled = true;
+        }
+    }
+
+    // Substage 2E: Commit Embedded Watermark C_W1
+    if (st.C_W1) {
+        if (badgeStep2E) {
+            badgeStep2E.textContent = "Committed (NIST P-256)";
+            badgeStep2E.className = "badge badge-success";
+        }
+        if (sellerStageCw1Hex) sellerStageCw1Hex.textContent = st.C_W1;
+        if (sellerSubstage2EContent) sellerSubstage2EContent.style.display = "block";
+        if (btnCommitW1) {
+            btnCommitW1.style.display = "none";
+            btnCommitW1.disabled = true;
+        }
+        if (btnAdvanceToStage3) btnAdvanceToStage3.disabled = false;
+    } else if (st.W1) {
+        if (badgeStep2E) {
+            badgeStep2E.textContent = "Ready to Commit";
+            badgeStep2E.className = "badge badge-warning";
+        }
+        if (sellerSubstage2EContent) sellerSubstage2EContent.style.display = "none";
+        if (btnCommitW1) {
+            btnCommitW1.style.display = "inline-flex";
+            btnCommitW1.disabled = false;
+        }
+        if (btnAdvanceToStage3) btnAdvanceToStage3.disabled = true;
+    } else {
+        if (badgeStep2E) {
+            badgeStep2E.textContent = "Awaiting Split";
+            badgeStep2E.className = "badge badge-v1";
+        }
+        if (sellerSubstage2EContent) sellerSubstage2EContent.style.display = "none";
+        if (btnCommitW1) {
+            btnCommitW1.style.display = "inline-flex";
+            btnCommitW1.disabled = true;
+        }
+        if (btnAdvanceToStage3) btnAdvanceToStage3.disabled = true;
+    }
+
+    // Active / Collapsed progression management for Stage 2
+    if (st.watermarked_RTL) {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box collapsed";
+    } else if (st.C_W1) {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box active";
+    } else if (st.W1) {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box active";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box collapsed";
+    } else if (st.C_W) {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box active";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box collapsed";
+    } else if (st.watermark_W) {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box active";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box collapsed";
+    } else if (st.buyer_approved) {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box active";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box collapsed";
+    } else {
+        if (sellerSubstage2ABox) sellerSubstage2ABox.className = "seller-substage-box active";
+        if (sellerSubstage2BBox) sellerSubstage2BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2CBox) sellerSubstage2CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2DBox) sellerSubstage2DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage2EBox) sellerSubstage2EBox.className = "seller-substage-box collapsed";
+    }
+
+    // --- STAGE 3 UI SYNCHRONIZATION ---
+    const btnEmbedWatermark = document.getElementById("btnEmbedWatermark");
+    const sellerStage3ActionBox = document.getElementById("sellerStage3ActionBox");
+    const sellerStage3Results = document.getElementById("sellerStage3Results");
+    const badgeStage3Top = document.getElementById("badgeStage3Top");
+
+    if (st.watermarked_RTL) {
+        if (btnEmbedWatermark) btnEmbedWatermark.style.display = "none";
+        if (sellerStage3ActionBox) sellerStage3ActionBox.style.display = "none";
+        if (sellerStage3Results) sellerStage3Results.style.display = "block";
+        if (badgeStage3Top) {
+            badgeStage3Top.textContent = "Embedded";
+            badgeStage3Top.className = "badge badge-success";
+        }
+    } else {
+        if (btnEmbedWatermark) {
+            btnEmbedWatermark.style.display = "inline-flex";
+            btnEmbedWatermark.disabled = !st.C_W1;
+        }
+        if (sellerStage3ActionBox) sellerStage3ActionBox.style.display = "block";
+        if (sellerStage3Results) sellerStage3Results.style.display = "none";
+        if (badgeStage3Top) {
+            badgeStage3Top.textContent = st.C_W1 ? "Ready to Embed" : "Pending Stage 2";
+            badgeStage3Top.className = st.C_W1 ? "badge badge-warning" : "badge badge-v1";
+        }
+    }
+
+    // --- STAGE 4 SEQUENTIAL SUBSTAGE SYNCHRONIZATION ---
+    const sellerSubstage4ABox = document.getElementById("sellerSubstage4ABox");
+    const sellerSubstage4BBox = document.getElementById("sellerSubstage4BBox");
+    const sellerSubstage4CBox = document.getElementById("sellerSubstage4CBox");
+    const sellerSubstage4DBox = document.getElementById("sellerSubstage4DBox");
+    const sellerSubstage4EBox = document.getElementById("sellerSubstage4EBox");
+
+    const btnCalculateEs = document.getElementById("btnCalculateEs");
+    const sellerStageEsContent = document.getElementById("sellerStageEsContent");
+    const sellerStageEsBadge = document.getElementById("sellerStageEsBadge");
+    const sellerStageEsBitstream = document.getElementById("sellerStageEsBitstream");
+
+    const btnRunCompareEncodings = document.getElementById("btnRunCompareEncodings");
+    const sellerStageComparisonContent = document.getElementById("sellerStageComparisonContent");
+    const sellerBadge4C = document.getElementById("sellerBadge4C");
+
+    const btnRunBehavioralValidation = document.getElementById("btnRunBehavioralValidation");
+    const sellerStageBehavioralContent = document.getElementById("sellerStageBehavioralContent");
+    const sellerBadge4D = document.getElementById("sellerBadge4D");
+
+    const badgeStage4Top = document.getElementById("badgeStage4Top");
+
+    // 4A: Protected RTL Synthesis
+    if (st.watermarked_RTL) {
+        const verilogCodeBox = document.getElementById("verilogCodeBox");
+        if (verilogCodeBox) verilogCodeBox.textContent = st.watermarked_RTL;
+        const viewVerilog = document.getElementById("viewVerilog");
+        if (viewVerilog) viewVerilog.style.display = "block";
+    }
+
+    // 4B: Calculate Secured Design Encoding (E_S)
+    if (st.stage4_es_calculated) {
+        if (btnCalculateEs) btnCalculateEs.style.display = "none";
+        if (sellerStageEsContent) sellerStageEsContent.style.display = "block";
+        if (sellerStageEsBitstream) sellerStageEsBitstream.textContent = st.secured_encoding_E_S || st.design_encoding_D || "--";
+        if (sellerStageEsBadge) {
+            sellerStageEsBadge.textContent = "Reconstructed (143 bits)";
+            sellerStageEsBadge.className = "badge badge-success";
+        }
+    } else {
+        if (btnCalculateEs) {
+            btnCalculateEs.style.display = "inline-flex";
+            btnCalculateEs.disabled = !st.watermarked_RTL;
+        }
+        if (sellerStageEsContent) sellerStageEsContent.style.display = "none";
+        if (sellerStageEsBadge) {
+            sellerStageEsBadge.textContent = st.watermarked_RTL ? "Ready to Calculate" : "Pending RTL";
+            sellerStageEsBadge.className = st.watermarked_RTL ? "badge badge-warning" : "badge badge-v1";
+        }
+    }
+
+    // 4C: Compare Encodings (E_S vs D)
+    if (st.stage4_encodings_compared) {
+        if (btnRunCompareEncodings) btnRunCompareEncodings.style.display = "none";
+        if (sellerStageComparisonContent) sellerStageComparisonContent.style.display = "block";
+        if (sellerBadge4C) {
+            sellerBadge4C.textContent = "Unchanged: E_S = D";
+            sellerBadge4C.className = "badge badge-success";
+        }
+    } else {
+        if (btnRunCompareEncodings) {
+            btnRunCompareEncodings.style.display = "inline-flex";
+            btnRunCompareEncodings.disabled = !st.stage4_es_calculated;
+        }
+        if (sellerStageComparisonContent) sellerStageComparisonContent.style.display = "none";
+        if (sellerBadge4C) {
+            sellerBadge4C.textContent = st.stage4_es_calculated ? "Ready to Compare" : "Pending E_S";
+            sellerBadge4C.className = st.stage4_es_calculated ? "badge badge-warning" : "badge badge-v1";
+        }
+    }
+
+    // 4D: Behavioral Simulation Validation
+    if (st.stage4_behavioral_verified) {
+        if (btnRunBehavioralValidation) btnRunBehavioralValidation.style.display = "none";
+        if (sellerStageBehavioralContent) sellerStageBehavioralContent.style.display = "block";
+        if (sellerBadge4D) {
+            sellerBadge4D.textContent = "Verified (32/32 Matches)";
+            sellerBadge4D.className = "badge badge-success";
+        }
+    } else {
+        if (btnRunBehavioralValidation) {
+            btnRunBehavioralValidation.style.display = "inline-flex";
+            btnRunBehavioralValidation.disabled = !st.stage4_encodings_compared;
+        }
+        if (sellerStageBehavioralContent) sellerStageBehavioralContent.style.display = "none";
+        if (sellerBadge4D) {
+            sellerBadge4D.textContent = st.stage4_encodings_compared ? "Ready to Simulate" : "Pending Comparison";
+            sellerBadge4D.className = st.stage4_encodings_compared ? "badge badge-warning" : "badge badge-v1";
+        }
+    }
+
+    // 4E & Stage 4 Top Badge
+    if (badgeStage4Top) {
+        if (st.stage4_completed) {
+            badgeStage4Top.textContent = "Verified";
+            badgeStage4Top.className = "badge badge-success";
+        } else if (st.watermarked_RTL) {
+            badgeStage4Top.textContent = "Sequential";
+            badgeStage4Top.className = "badge badge-v1";
+        } else {
+            badgeStage4Top.textContent = "Pending Stage 3";
+            badgeStage4Top.className = "badge badge-v1";
+        }
+    }
+
+    // --- POPULATE COMPACT SUMMARY CHIPS FOR COLLAPSED DISCLOSURES ---
+    const sum1A = document.getElementById("sellerSummary1A");
+    if (sum1A) sum1A.textContent = st.design_encoding_D ? `Calculated · ${st.design_encoding_D.length} bits` : "Pending";
+    const sum1B = document.getElementById("sellerSummary1B");
+    if (sum1B) sum1B.textContent = st.C_D ? "Committed (NIST P-256)" : "Pending";
+    const sum2A = document.getElementById("sellerSummary2A");
+    if (sum2A) sum2A.textContent = st.buyer_approved ? "Approved & Received · 555 bits" : (st.buyer_request_status || "Not Requested");
+    const sum2B = document.getElementById("sellerSummary2B");
+    if (sum2B) sum2B.textContent = st.watermark_W ? `Generated · ${st.watermark_W.length} bits` : "Pending";
+    const sum2C = document.getElementById("sellerSummary2C");
+    if (sum2C) sum2C.textContent = st.C_W ? "Committed (NIST P-256)" : "Pending";
+    const sum2D = document.getElementById("sellerSummary2D");
+    if (sum2D) sum2D.textContent = (st.W1 && st.protected_W2) ? `Validated · W1: ${st.W1.length}b, W2: ${st.protected_W2.length}b` : "Pending";
+    const sum2E = document.getElementById("sellerSummary2E");
+    if (sum2E) sum2E.textContent = st.C_W1 ? "Committed (NIST P-256)" : "Pending";
+
+    const sum4A = document.getElementById("sellerSummary4A");
+    if (sum4A) sum4A.textContent = st.watermarked_RTL ? "Synthesized" : "Pending";
+    const sum4B = document.getElementById("sellerSummary4B");
+    if (sum4B) sum4B.textContent = st.stage4_es_calculated ? "Calculated · 143 bits" : "Pending";
+    const sum4C = document.getElementById("sellerSummary4C");
+    if (sum4C) sum4C.textContent = st.stage4_encodings_compared ? "Validated · E_S = D" : "Pending";
+    const sum4D = document.getElementById("sellerSummary4D");
+    if (sum4D) sum4D.textContent = st.stage4_behavioral_verified ? "Verified · 32/32 Matches" : "Pending";
+    const sum4E = document.getElementById("sellerSummary4E");
+    if (sum4E) sum4E.textContent = st.stage4_completed ? "Not Required · E_S = D" : "Pending";
+
+    // Progressive default activation for Stage 4 boxes
+    if (st.stage4_completed) {
+        if (sellerSubstage4ABox) sellerSubstage4ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4BBox) sellerSubstage4BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4CBox) sellerSubstage4CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4DBox) sellerSubstage4DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4EBox) sellerSubstage4EBox.className = "seller-substage-box collapsed";
+    } else if (st.stage4_behavioral_verified) {
+        if (sellerSubstage4ABox) sellerSubstage4ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4BBox) sellerSubstage4BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4CBox) sellerSubstage4CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4DBox) sellerSubstage4DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4EBox) sellerSubstage4EBox.className = "seller-substage-box active";
+    } else if (st.stage4_encodings_compared) {
+        if (sellerSubstage4ABox) sellerSubstage4ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4BBox) sellerSubstage4BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4CBox) sellerSubstage4CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4DBox) sellerSubstage4DBox.className = "seller-substage-box active";
+        if (sellerSubstage4EBox) sellerSubstage4EBox.className = "seller-substage-box collapsed";
+    } else if (st.stage4_es_calculated) {
+        if (sellerSubstage4ABox) sellerSubstage4ABox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4BBox) sellerSubstage4BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4CBox) sellerSubstage4CBox.className = "seller-substage-box active";
+        if (sellerSubstage4DBox) sellerSubstage4DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4EBox) sellerSubstage4EBox.className = "seller-substage-box collapsed";
+    } else if (st.watermarked_RTL) {
+        if (sellerSubstage4ABox) sellerSubstage4ABox.className = "seller-substage-box active";
+        if (sellerSubstage4BBox) sellerSubstage4BBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4CBox) sellerSubstage4CBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4DBox) sellerSubstage4DBox.className = "seller-substage-box collapsed";
+        if (sellerSubstage4EBox) sellerSubstage4EBox.className = "seller-substage-box collapsed";
     }
 
     if (st.pipeline_result && st.watermark_W) {
@@ -530,6 +1649,22 @@ function syncTransactionStateToUI(st) {
             sellerEvidCw1Status.textContent = "Not generated yet";
             sellerEvidCw1Status.className = "badge badge-v1";
         }
+    }
+    const sellerPrivGenGW = document.getElementById("sellerPrivGenGW");
+    if (sellerPrivGenGW) {
+        sellerPrivGenGW.textContent = (st.seller_private_info && st.seller_private_info.C_W_evidence && st.seller_private_info.C_W_evidence.commitment_verification.generator_g) || "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296";
+    }
+    const sellerPrivGenHW = document.getElementById("sellerPrivGenHW");
+    if (sellerPrivGenHW) {
+        sellerPrivGenHW.textContent = (st.seller_private_info && st.seller_private_info.C_W_evidence && st.seller_private_info.C_W_evidence.commitment_verification.generator_h) || "021ad06fad86cbbf99815a56f6c511152d048e5e0893d02c18194e3165a6aa4db3";
+    }
+    const sellerPrivGenGW1 = document.getElementById("sellerPrivGenGW1");
+    if (sellerPrivGenGW1) {
+        sellerPrivGenGW1.textContent = (st.seller_private_info && st.seller_private_info.C_W1_evidence && st.seller_private_info.C_W1_evidence.commitment_verification.generator_g) || "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296";
+    }
+    const sellerPrivGenHW1 = document.getElementById("sellerPrivGenHW1");
+    if (sellerPrivGenHW1) {
+        sellerPrivGenHW1.textContent = (st.seller_private_info && st.seller_private_info.C_W1_evidence && st.seller_private_info.C_W1_evidence.commitment_verification.generator_h) || "021ad06fad86cbbf99815a56f6c511152d048e5e0893d02c18194e3165a6aa4db3";
     }
 
     // --- BUYER UI UPDATES ---
@@ -2526,7 +3661,7 @@ function initVerifierWorkflow() {
         });
     }
 
-    // Stepper pill clicks
+    // Stepper pill clicks (legacy support)
     const stepperPills = document.querySelectorAll("#verifierStepper .step-tracker-pill");
     stepperPills.forEach(pill => {
         pill.addEventListener("click", () => {
@@ -2537,6 +3672,75 @@ function initVerifierWorkflow() {
             }
         });
     });
+
+    // 4 Evidence Sections Navigation Cards
+    const sectionNavCards = document.querySelectorAll(".verifier-section-card");
+    sectionNavCards.forEach(card => {
+        card.addEventListener("click", () => {
+            const secNum = parseInt(card.dataset.sec, 10);
+            if (!isNaN(secNum)) {
+                switchVerifierSection(secNum);
+            }
+        });
+    });
+
+    // Expandable subsection toggle on header click
+    document.querySelectorAll(".v-step-header").forEach(hdr => {
+        hdr.addEventListener("click", (e) => {
+            if (e.target.closest(".v-step-inline-btn")) return;
+            const stepBox = hdr.closest(".v-step-box");
+            if (stepBox) {
+                stepBox.classList.toggle("collapsed");
+            }
+        });
+    });
+
+    // Inline step execution buttons inside subsections
+    document.querySelectorAll(".v-step-inline-btn").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const stepNum = parseInt(btn.dataset.step, 10);
+            if (!isNaN(stepNum)) {
+                await executeVerifierStepInline(stepNum, btn);
+            }
+        });
+    });
+
+    // Step item cards in sections (click to expand/focus)
+    const stepItemCards = document.querySelectorAll(".v-step-item-card");
+    stepItemCards.forEach(card => {
+        card.addEventListener("click", () => {
+            const stepNum = parseInt(card.dataset.step, 10);
+            if (!isNaN(stepNum)) {
+                currentVerifierStep = stepNum;
+                renderVerifierStep(stepNum);
+            }
+        });
+    });
+}
+
+function switchVerifierSection(secNum) {
+    // Highlight active section navigation card and view
+    for (let i = 1; i <= 4; i++) {
+        const nav = document.getElementById(`vSecNav${i}`);
+        const view = document.getElementById(`vSecView${i}`);
+        if (nav) {
+            if (i === secNum) nav.classList.add("active");
+            else nav.classList.remove("active");
+        }
+        if (view) {
+            if (i === secNum) view.classList.add("active");
+            else view.classList.remove("active");
+        }
+    }
+
+    if (secNum === 4) {
+        const repCard = document.getElementById("verifierFinalReportCard");
+        if (repCard && currentVerifierSession && currentVerifierSession.final_report) {
+            repCard.style.display = "block";
+            renderFinalReport(currentVerifierSession.final_report);
+        }
+    }
 }
 
 async function initOrRefreshVerifierProfile() {
@@ -2626,6 +3830,7 @@ async function initOrRefreshVerifierProfile() {
             currentVerifierSession = data.session;
             const sessBadge = document.getElementById("verifierSessionBadge");
             if (sessBadge) sessBadge.textContent = `Session: ${currentVerifierSession.session_id}`;
+            updateAllVerifierStepsUI();
             if (currentVerifierSession.final_report) {
                 renderFinalReport(currentVerifierSession.final_report);
             }
@@ -2635,43 +3840,541 @@ async function initOrRefreshVerifierProfile() {
     }
 }
 
+async function executeVerifierStepInline(stepNum, btn) {
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span>Executing Step ${stepNum}...</span>`;
+
+    try {
+        const res = await fetch("/api/verifier/execute_step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ step_number: stepNum })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            currentVerifierSession = data.session;
+            currentVerifierStep = stepNum;
+
+            // Expand this step card
+            const stepBox = document.getElementById(`vStepBox_${stepNum}`);
+            if (stepBox) stepBox.classList.remove("collapsed");
+
+            // Update all step views and badges
+            updateAllVerifierStepsUI();
+
+            // If final step 13, render report
+            if (stepNum === 13 && currentVerifierSession.final_report) {
+                renderFinalReport(currentVerifierSession.final_report);
+            }
+        } else {
+            const err = await res.json();
+            alert(`Step ${stepNum} verification error: ${err.detail || "Server error"}`);
+        }
+    } catch (err) {
+        console.error("Failed to execute verification step:", err);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+function isVerifierStepEligible(stepNum, stepResults) {
+    if (stepNum === 1) return true;
+    const isDone = (num, okStatuses) => {
+        const r = stepResults[`step_${num}`];
+        const defaultOk = ["MATCH", "NOT REQUIRED", "LOADED", "EXTRACTED", "VALIDATED", "CONSISTENT", "RECONSTRUCTED"];
+        return r && (okStatuses || defaultOk).includes(r.status);
+    };
+    if (stepNum === 2) return isDone(1, ["LOADED", "MATCH"]);
+    if (stepNum === 3) return isDone(2, ["EXTRACTED", "MATCH"]);
+    if (stepNum === 4) return isDone(3, ["NOT REQUIRED", "MATCH"]);
+    if (stepNum === 5) return isDone(1, ["LOADED", "MATCH"]);
+    if (stepNum === 6) return isDone(5, ["EXTRACTED", "MATCH"]);
+    if (stepNum === 7) return isDone(5, ["EXTRACTED", "MATCH"]);
+    if (stepNum === 8) return isDone(7, ["MATCH", "RECONSTRUCTED"]);
+    if (stepNum === 9) return isDone(1, ["LOADED", "MATCH"]);
+    if (stepNum === 10) return isDone(9, ["MATCH", "VALIDATED"]);
+    if (stepNum === 11) return isDone(4, ["MATCH"]) && isDone(8, ["MATCH"]) && isDone(10, ["MATCH"]);
+    if (stepNum === 12) return isDone(11, ["MATCH"]);
+    if (stepNum === 13) {
+        for (let s = 1; s <= 12; s++) {
+            if (!isDone(s)) return false;
+        }
+        return true;
+    }
+    return true;
+}
+
+function updateAllVerifierStepsUI() {
+    let completedCount = 0;
+    let sec1Completed = 0;
+    let sec2Completed = 0;
+    let sec3Completed = 0;
+
+    const stepResults = (currentVerifierSession && currentVerifierSession.step_results) || {};
+
+    for (let i = 1; i <= 13; i++) {
+        const res = stepResults[`step_${i}`];
+        const box = document.getElementById(`vStepBox_${i}`);
+        const badge = document.getElementById(`vStepBadge_${i}`);
+        const resultBox = document.getElementById(`vStepResult_${i}`);
+        const notes = document.getElementById(`vStepNotes_${i}`);
+        const summary = document.getElementById(`vStepSummary_${i}`);
+        const btn = document.getElementById(`btnVerifierExecStep_${i}`);
+        const rerun = document.getElementById(`vStepRerunContainer_${i}`);
+
+        if (res) {
+            const isSuccess = (res.status === "MATCH" || res.status === "NOT REQUIRED" || res.status === "LOADED" || res.status === "EXTRACTED" || res.status === "VALIDATED" || res.status === "CONSISTENT" || res.status === "RECONSTRUCTED");
+            if (isSuccess) {
+                completedCount++;
+                if (i <= 8) sec1Completed++;
+                else if (i <= 10) sec2Completed++;
+                else if (i <= 12) sec3Completed++;
+            }
+
+            if (box) {
+                if (isSuccess) {
+                    box.classList.add("completed");
+                    box.classList.remove("failed");
+                } else if (res.status === "MISMATCH" || res.status === "BLOCKED") {
+                    box.classList.add("failed");
+                    box.classList.remove("completed");
+                }
+            }
+
+            if (badge) {
+                badge.textContent = res.status;
+                badge.className = isSuccess
+                    ? "status-badge-match"
+                    : (res.status === "MISMATCH" ? "status-badge-mismatch" : "status-badge-blocked");
+            }
+
+            if (resultBox) {
+                resultBox.style.display = "block";
+            }
+
+            if (notes && res.notes) {
+                notes.textContent = res.notes;
+            }
+
+            if (summary) {
+                if (i === 1) summary.textContent = "Synthesized RTL Loaded";
+                else if (i === 2) summary.textContent = "143 bits (E_S')";
+                else if (i === 3) summary.textContent = "E_S = D (Invariant)";
+                else if (i === 4) summary.textContent = "C_D Verified (P-256)";
+                else if (i === 5) summary.textContent = "32 bits (W1' Extracted)";
+                else if (i === 6) summary.textContent = "C_W1 Verified";
+                else if (i === 7) summary.textContent = "256 bits (W' Reconstructed)";
+                else if (i === 8) summary.textContent = "C_W Verified";
+                else if (i === 9) summary.textContent = "555 bits (B' Validated)";
+                else if (i === 10) summary.textContent = "C_B Verified";
+                else if (i === 11) summary.textContent = "HKDF Formula Match";
+                else if (i === 12) summary.textContent = "License (exclusive)";
+                else if (i === 13) summary.textContent = "Report Ready";
+            }
+
+            // Button Lifecycle: hide large action button when completed, show compact rerun action
+            if (isSuccess) {
+                if (btn) btn.style.display = "none";
+                if (rerun) rerun.style.display = "inline-block";
+            } else {
+                if (btn) {
+                    btn.style.display = "inline-flex";
+                    btn.disabled = false;
+                    btn.title = "";
+                }
+                if (rerun) rerun.style.display = "none";
+            }
+
+            populateStepResultFields(i, res);
+        } else {
+            if (box) {
+                box.classList.remove("completed", "failed");
+            }
+            if (resultBox) {
+                resultBox.style.display = "none";
+            }
+            const eligible = isVerifierStepEligible(i, stepResults);
+            if (badge) {
+                if (eligible) {
+                    badge.textContent = "READY TO EXECUTE";
+                    badge.className = "badge badge-warning";
+                } else {
+                    badge.textContent = "Pending";
+                    badge.className = "badge badge-v1";
+                }
+            }
+            if (btn) {
+                btn.style.display = "inline-flex";
+                btn.disabled = !eligible;
+                btn.title = eligible ? "" : "Prerequisite steps not completed.";
+            }
+            if (rerun) {
+                rerun.style.display = "none";
+            }
+        }
+    }
+
+    // Update section badges
+    const b1 = document.getElementById("vSecBadge1");
+    if (b1) {
+        b1.textContent = sec1Completed === 8 ? "8/8 Verified" : `${sec1Completed}/8 Steps`;
+        b1.className = sec1Completed === 8 ? "badge badge-success" : "badge badge-v1";
+    }
+    const b2 = document.getElementById("vSecBadge2");
+    if (b2) {
+        b2.textContent = sec2Completed === 2 ? "2/2 Verified" : `${sec2Completed}/2 Steps`;
+        b2.className = sec2Completed === 2 ? "badge badge-success" : "badge badge-v1";
+    }
+    const b3 = document.getElementById("vSecBadge3");
+    if (b3) {
+        b3.textContent = sec3Completed === 2 ? "2/2 Verified" : `${sec3Completed}/2 Steps`;
+        b3.className = sec3Completed === 2 ? "badge badge-success" : "badge badge-v1";
+    }
+    const b4 = document.getElementById("vSecBadge4");
+    if (b4) {
+        if (currentVerifierSession && currentVerifierSession.final_report) {
+            b4.textContent = "Report Ready";
+            b4.className = "badge badge-success";
+        } else {
+            b4.textContent = "Step 13";
+            b4.className = "badge badge-v1";
+        }
+    }
+
+    // Subsection badges
+    const bEnc = document.getElementById("vBadgeEncoding");
+    if (bEnc) {
+        const count = [1, 2, 3, 4].filter(i => stepResults[`step_${i}`] && ["MATCH", "NOT REQUIRED", "LOADED", "EXTRACTED"].includes(stepResults[`step_${i}`].status)).length;
+        bEnc.textContent = count === 4 ? "4/4 Verified" : `${count}/4 Steps`;
+        bEnc.className = count === 4 ? "badge badge-success" : "badge badge-v1";
+    }
+    const bWm = document.getElementById("vBadgeWatermark");
+    if (bWm) {
+        const count = [5, 6, 7, 8].filter(i => stepResults[`step_${i}`] && ["MATCH", "NOT REQUIRED", "EXTRACTED", "RECONSTRUCTED"].includes(stepResults[`step_${i}`].status)).length;
+        bWm.textContent = count === 4 ? "4/4 Verified" : `${count}/4 Steps`;
+        bWm.className = count === 4 ? "badge badge-success" : "badge badge-v1";
+    }
+    const bBuyer = document.getElementById("vBadgeBuyer");
+    if (bBuyer) {
+        bBuyer.textContent = sec2Completed === 2 ? "2/2 Verified" : `${sec2Completed}/2 Steps`;
+        bBuyer.className = sec2Completed === 2 ? "badge badge-success" : "badge badge-v1";
+    }
+    const bTx = document.getElementById("vBadgeTx");
+    if (bTx) {
+        bTx.textContent = sec3Completed === 2 ? "2/2 Verified" : `${sec3Completed}/2 Steps`;
+        bTx.className = sec3Completed === 2 ? "badge badge-success" : "badge badge-v1";
+    }
+    const bRep = document.getElementById("vBadgeReport");
+    if (bRep) {
+        if (currentVerifierSession && currentVerifierSession.final_report) {
+            bRep.textContent = "Generated";
+            bRep.className = "badge badge-success";
+        } else {
+            bRep.textContent = "Step 13";
+            bRep.className = "badge badge-v1";
+        }
+    }
+
+    // Overall progress badge in header: clear "X of 13 steps completed" format
+    const overallCount = document.getElementById("vCompletedStepsCount");
+    if (overallCount) {
+        overallCount.textContent = `${completedCount} of 13`;
+    }
+}
+
+function populateStepResultFields(stepNum, res) {
+    const s1 = res.stage1_reconstruction || {};
+    const s2 = res.stage2_verification || {};
+
+    if (stepNum === 1) {
+        const codeEl = document.getElementById("vDisputedVerilogRTL_inline");
+        const rtlCode = s1.synthesizable_verilog_code || s1.preview || (currentVerifierSession && currentVerifierSession.disputed_rtl) || "--";
+        if (codeEl) codeEl.textContent = rtlCode;
+        const propsEl = document.getElementById("vStepProps_1");
+        if (propsEl) propsEl.textContent = `${s1.lines_of_code || '--'} lines (${s1.artifact_type || 'Synthesizable Verilog RTL'})`;
+        const digestEl = document.getElementById("vStepDigest_1");
+        if (digestEl && s1.sha256_digest) digestEl.textContent = s1.sha256_digest;
+        const s1Status = document.getElementById("vStage1Status_1");
+        if (s1Status) s1Status.textContent = s1.status || res.status || "LOADED";
+    } else if (stepNum === 2) {
+        const valEl = document.getElementById("vStepVal_2");
+        if (valEl) valEl.textContent = s1.extracted_bitstream || s1.secured_encoding_ES || "--";
+        const propEl = document.getElementById("vStepProps_2");
+        if (propEl) {
+            const nodes = s1.total_nodes_recovered || 13;
+            const steps = s1.total_steps_recovered || 7;
+            propEl.textContent = `${s1.bit_length || 143} bits (${nodes} nodes across ${steps} steps)`;
+        }
+        const s1Status = document.getElementById("vStage1Status_2");
+        if (s1Status) s1Status.textContent = s1.status || res.status || "EXTRACTED";
+    } else if (stepNum === 3) {
+        const invEl = document.getElementById("vStepInvariance_3");
+        if (invEl) {
+            invEl.textContent = s1.comparison || (res.status === "NOT REQUIRED" || res.status === "MATCH" ? "E_S is bit-for-bit identical to D (143/143 bits match)." : "E_S differs from baseline D.");
+        }
+        const cesEl = document.getElementById("vStepStoredCES_3");
+        if (cesEl) {
+            cesEl.textContent = s2.stored_c_es || (res.status === "NOT REQUIRED" ? "NOT_REQUIRED (E_S = D)" : s2.stored_commitment_C_ES || "NOT_REQUIRED");
+        }
+        const branchEl = document.getElementById("vStepBranch_3");
+        if (branchEl) {
+            branchEl.textContent = s1.branch_action || (s1.branch ? `${s1.branch} (Invariance holds — direct verification of C_D)` : "Branch A (Invariance holds — direct verification of C_D)");
+        }
+        const pill = document.getElementById("vStage2Pill_3");
+        if (pill) {
+            pill.textContent = res.status || "NOT REQUIRED";
+            pill.className = (res.status === "NOT REQUIRED" || res.status === "MATCH") ? "badge badge-success" : "badge badge-warning";
+        }
+    } else if (stepNum === 4) {
+        const propEl = document.getElementById("vStepProps_4");
+        if (propEl) propEl.textContent = `${s1.bit_length || 143} bits (Golden Benchmark)`;
+        const valEl = document.getElementById("vStepVal_4");
+        if (valEl) valEl.textContent = s1.calculated_value_D || "--";
+        const openEl = document.getElementById("vStepOpening_4");
+        if (openEl && s2.opening_factor_r_D) openEl.textContent = s2.opening_factor_r_D;
+        const storedEl = document.getElementById("vStepStored_4");
+        if (storedEl && s2.stored_commitment_C_D) storedEl.textContent = s2.stored_commitment_C_D;
+        const recalcEl = document.getElementById("vStepRecalc_4");
+        if (recalcEl && s2.recalculated_commitment_C_D) recalcEl.textContent = s2.recalculated_commitment_C_D;
+        const pill = document.getElementById("vStage2Pill_4");
+        if (pill) {
+            pill.textContent = s2.status || res.status;
+            pill.className = (s2.status === "MATCH" || res.status === "MATCH") ? "badge badge-success" : "badge badge-danger";
+        }
+    } else if (stepNum === 5) {
+        const valEl = document.getElementById("vStepVal_5");
+        if (valEl && s1.extracted_bitstream_W1) valEl.textContent = s1.extracted_bitstream_W1;
+        const propEl = document.getElementById("vStepProps_5");
+        if (propEl) propEl.textContent = `${s1.bit_length || 32} bits`;
+        const pill = document.getElementById("vStage2Pill_5");
+        if (pill) {
+            pill.textContent = s1.extraction_status || s1.status || res.status || "EXTRACTED";
+            pill.className = "badge badge-success";
+        }
+    } else if (stepNum === 6) {
+        const openEl = document.getElementById("vStepOpening_6");
+        if (openEl && s2.opening_factor_r_W1) openEl.textContent = s2.opening_factor_r_W1;
+        const storedEl = document.getElementById("vStepStored_6");
+        if (storedEl && s2.stored_commitment_C_W1) storedEl.textContent = s2.stored_commitment_C_W1;
+        const recalcEl = document.getElementById("vStepRecalc_6");
+        if (recalcEl && s2.recalculated_commitment_C_W1) recalcEl.textContent = s2.recalculated_commitment_C_W1;
+        const pill = document.getElementById("vStage2Pill_6");
+        if (pill) {
+            pill.textContent = s2.status || res.status;
+            pill.className = s2.status === "MATCH" ? "badge badge-success" : "badge badge-danger";
+        }
+    } else if (stepNum === 7) {
+        const valEl = document.getElementById("vStepVal_7");
+        if (valEl && s1.reconstructed_watermark_W) valEl.textContent = s1.reconstructed_watermark_W;
+        const propEl = document.getElementById("vStepProps_7");
+        if (propEl) propEl.textContent = `${s1.total_bit_length || s1.bit_length || 256} bits`;
+        const pill = document.getElementById("vStage2Pill_7");
+        if (pill) {
+            pill.textContent = s1.status || res.status || "MATCH";
+            pill.className = "badge badge-success";
+        }
+    } else if (stepNum === 8) {
+        const openEl = document.getElementById("vStepOpening_8");
+        if (openEl && s2.opening_factor_r_W) openEl.textContent = s2.opening_factor_r_W;
+        const storedEl = document.getElementById("vStepStored_8");
+        if (storedEl && s2.stored_commitment_C_W) storedEl.textContent = s2.stored_commitment_C_W;
+        const recalcEl = document.getElementById("vStepRecalc_8");
+        if (recalcEl && s2.recalculated_commitment_C_W) recalcEl.textContent = s2.recalculated_commitment_C_W;
+        const pill = document.getElementById("vStage2Pill_8");
+        if (pill) {
+            pill.textContent = s2.status || res.status;
+            pill.className = s2.status === "MATCH" ? "badge badge-success" : "badge badge-danger";
+        }
+    } else if (stepNum === 9) {
+        const valEl = document.getElementById("vStepVal_9");
+        if (valEl && s1.bitstream_B) valEl.textContent = s1.bitstream_B;
+        const propEl = document.getElementById("vStepProps_9");
+        if (propEl) propEl.textContent = `${s1.bit_length || 555} bits`;
+        const pill = document.getElementById("vStage2Pill_9");
+        if (pill) {
+            pill.textContent = s1.status || res.status || "VALIDATED";
+            pill.className = "badge badge-success";
+        }
+    } else if (stepNum === 10) {
+        const openEl = document.getElementById("vStepOpening_10");
+        if (openEl && s2.opening_factor_r_B) openEl.textContent = s2.opening_factor_r_B;
+        const storedEl = document.getElementById("vStepStored_10");
+        if (storedEl && s2.stored_commitment_C_B) storedEl.textContent = s2.stored_commitment_C_B;
+        const recalcEl = document.getElementById("vStepRecalc_10");
+        if (recalcEl && s2.recalculated_commitment_C_B) recalcEl.textContent = s2.recalculated_commitment_C_B;
+        const pill = document.getElementById("vStage2Pill_10");
+        if (pill) {
+            pill.textContent = s2.status || res.status;
+            pill.className = s2.status === "MATCH" ? "badge badge-success" : "badge badge-danger";
+        }
+    } else if (stepNum === 11) {
+        const propEl = document.getElementById("vStepProps_11");
+        const bitLen = (s1.reconstructed_watermark_W && s1.reconstructed_watermark_W.length) || (s1.expected_watermark_W && s1.expected_watermark_W.length) || 256;
+        if (propEl) propEl.textContent = `${bitLen} bits`;
+        const valEl = document.getElementById("vStepVal_11");
+        if (valEl) valEl.textContent = s1.expected_watermark_W || s1.reconstructed_watermark_W || "--";
+        const pill = document.getElementById("vStage2Pill_11");
+        if (pill) {
+            pill.textContent = s2.status || res.status;
+            pill.className = s2.status === "MATCH" ? "badge badge-success" : "badge badge-danger";
+        }
+    } else if (stepNum === 12) {
+        const pill = document.getElementById("vStage2Pill_12");
+        if (pill) {
+            pill.textContent = s2.status || res.status;
+            pill.className = (s2.status === "MATCH" || s2.status === "CONSISTENT") ? "badge badge-success" : "badge badge-danger";
+        }
+    } else if (stepNum === 13) {
+        const repCard = document.getElementById("verifierFinalReportCard");
+        if (repCard && currentVerifierSession && currentVerifierSession.final_report) {
+            repCard.style.display = "block";
+            renderFinalReport(currentVerifierSession.final_report);
+        }
+    }
+}
+
 function renderVerifierStep(stepNum) {
     const meta = VERIFIER_STEPS_META.find(m => m.num === stepNum) || VERIFIER_STEPS_META[0];
 
-    const badgeNum = document.getElementById("vStepBadgeNum");
-    if (badgeNum) badgeNum.textContent = meta.num;
+    // Determine target evidence section
+    let activeSec = 1;
+    if (stepNum <= 8) activeSec = 1;
+    else if (stepNum <= 10) activeSec = 2;
+    else if (stepNum <= 12) activeSec = 3;
+    else activeSec = 4;
 
-    const titleEl = document.getElementById("vStepHeaderTitle");
-    if (titleEl) titleEl.textContent = meta.title;
+    switchVerifierSection(activeSec);
 
-    const descEl = document.getElementById("vStepHeaderDesc");
-    if (descEl) descEl.textContent = meta.desc;
+    // Expand targeted step box
+    for (let i = 1; i <= 13; i++) {
+        const box = document.getElementById(`vStepBox_${i}`);
+        if (box) {
+            if (i === stepNum) box.classList.remove("collapsed");
+        }
+    }
 
-    const partyEl = document.getElementById("vStepPartyBadge");
-    if (partyEl) partyEl.textContent = `Party: ${meta.party}`;
+    updateAllVerifierStepsUI();
+    return;
 
-    const btnExec = document.getElementById("btnVerifierExecStep");
-    if (btnExec) btnExec.textContent = `Execute Step ${stepNum}`;
+    // Update step item cards and summary chips across all sections
+    let sec1Completed = 0;
+    let sec2Completed = 0;
+    let sec3Completed = 0;
 
-    // Update stepper pill active states
-    document.querySelectorAll("#verifierStepper .step-tracker-pill").forEach(pill => {
-        const pNum = parseInt(pill.dataset.step, 10);
-        pill.classList.remove("active");
-        if (pNum === stepNum) pill.classList.add("active");
+    for (let i = 1; i <= 12; i++) {
+        const card = document.getElementById(`vStepItemCard_${i}`);
+        const badge = document.getElementById(`vStepBadge_${i}`);
+        const summary = document.getElementById(`vStepSummary_${i}`);
 
-        if (currentVerifierSession && currentVerifierSession.step_results) {
-            const stepRes = currentVerifierSession.step_results[`step_${pNum}`];
-            if (stepRes) {
-                if (stepRes.status === "MATCH" || stepRes.status === "NOT REQUIRED" || stepRes.status === "LOADED" || stepRes.status === "EXTRACTED" || stepRes.status === "VALIDATED") {
-                    pill.classList.add("completed");
-                    pill.classList.remove("failed");
-                } else if (stepRes.status === "MISMATCH" || stepRes.status === "BLOCKED") {
-                    pill.classList.add("failed");
-                    pill.classList.remove("completed");
+        if (card) {
+            if (i === stepNum) card.classList.add("active-step");
+            else card.classList.remove("active-step");
+        }
+
+        const res = (currentVerifierSession && currentVerifierSession.step_results)
+            ? currentVerifierSession.step_results[`step_${i}`]
+            : null;
+
+        if (res) {
+            const isSuccess = (res.status === "MATCH" || res.status === "NOT REQUIRED" || res.status === "LOADED" || res.status === "EXTRACTED" || res.status === "VALIDATED");
+            if (isSuccess) {
+                if (i <= 8) sec1Completed++;
+                else if (i <= 10) sec2Completed++;
+                else sec3Completed++;
+            }
+
+            if (badge) {
+                badge.textContent = res.status;
+                badge.className = isSuccess
+                    ? "status-badge-match"
+                    : (res.status === "MISMATCH" ? "status-badge-mismatch" : "status-badge-blocked");
+            }
+
+            if (summary) {
+                if (i === 1) summary.textContent = "Synthesized RTL Loaded";
+                else if (i === 2) summary.textContent = "143 bits (E_S')";
+                else if (i === 3) summary.textContent = "E_S = D (Invariant)";
+                else if (i === 4) summary.textContent = "C_D Verified (P-256)";
+                else if (i === 5) summary.textContent = "32 bits (W1' Extracted)";
+                else if (i === 6) summary.textContent = "C_W1 Verified";
+                else if (i === 7) summary.textContent = "256 bits (W' Reconstructed)";
+                else if (i === 8) summary.textContent = "C_W Verified";
+                else if (i === 9) summary.textContent = "555 bits (B' Validated)";
+                else if (i === 10) summary.textContent = "C_B Verified";
+                else if (i === 11) summary.textContent = "HKDF Formula Match";
+                else if (i === 12) summary.textContent = "License (exclusive)";
+            }
+        } else {
+            if (badge) {
+                if (i === stepNum) {
+                    badge.textContent = "READY TO EXECUTE";
+                    badge.className = "badge badge-warning";
+                } else {
+                    badge.textContent = "Pending";
+                    badge.className = "badge badge-v1";
                 }
             }
         }
-    });
+    }
+
+    // Update 4 Section Badges & Subsection Badges
+    const b1 = document.getElementById("vSecBadge1");
+    if (b1) {
+        if (sec1Completed === 8) {
+            b1.textContent = "8/8 Verified";
+            b1.className = "badge badge-success";
+        } else {
+            b1.textContent = `${sec1Completed}/8 Steps`;
+            b1.className = "badge badge-v1";
+        }
+    }
+    const b2 = document.getElementById("vSecBadge2");
+    if (b2) {
+        if (sec2Completed === 2) {
+            b2.textContent = "2/2 Verified";
+            b2.className = "badge badge-success";
+        } else {
+            b2.textContent = `${sec2Completed}/2 Steps`;
+            b2.className = "badge badge-v1";
+        }
+    }
+    const b3 = document.getElementById("vSecBadge3");
+    if (b3) {
+        if (sec3Completed === 2) {
+            b3.textContent = "2/2 Verified";
+            b3.className = "badge badge-success";
+        } else {
+            b3.textContent = `${sec3Completed}/2 Steps`;
+            b3.className = "badge badge-v1";
+        }
+    }
+    const b4 = document.getElementById("vSecBadge4");
+    if (b4) {
+        if (currentVerifierSession && currentVerifierSession.final_report) {
+            b4.textContent = "Report Ready";
+            b4.className = "badge badge-success";
+        } else {
+            b4.textContent = "Step 13";
+            b4.className = "badge badge-v1";
+        }
+    }
+
+    const bEnc = document.getElementById("vBadgeEncoding");
+    if (bEnc) {
+        const count = [1, 2, 3, 4].filter(i => currentVerifierSession && currentVerifierSession.step_results && currentVerifierSession.step_results[`step_${i}`] && (currentVerifierSession.step_results[`step_${i}`].status === "MATCH" || currentVerifierSession.step_results[`step_${i}`].status === "NOT REQUIRED" || currentVerifierSession.step_results[`step_${i}`].status === "LOADED")).length;
+        bEnc.textContent = count === 4 ? "4/4 Verified" : `${count}/4 Steps`;
+        bEnc.className = count === 4 ? "badge badge-success" : "badge badge-v1";
+    }
+
+    const bWm = document.getElementById("vBadgeWatermark");
+    if (bWm) {
+        const count = [5, 6, 7, 8].filter(i => currentVerifierSession && currentVerifierSession.step_results && currentVerifierSession.step_results[`step_${i}`] && (currentVerifierSession.step_results[`step_${i}`].status === "MATCH" || currentVerifierSession.step_results[`step_${i}`].status === "NOT REQUIRED" || currentVerifierSession.step_results[`step_${i}`].status === "EXTRACTED")).length;
+        bWm.textContent = count === 4 ? "4/4 Verified" : `${count}/4 Steps`;
+        bWm.className = count === 4 ? "badge badge-success" : "badge badge-v1";
+    }
 
     const stepResult = currentVerifierSession && currentVerifierSession.step_results
         ? currentVerifierSession.step_results[`step_${stepNum}`]

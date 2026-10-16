@@ -567,6 +567,104 @@ def reject_buyer_endpoint():
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/transaction/generate_watermark")
+def generate_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
+    mgr = TransactionManager.get_instance()
+    p = req or ContinueWatermarkRequest()
+    try:
+        st = mgr.generate_transaction_watermark(
+            transaction_id=p.transaction_id or "TX-001",
+            seller_id=p.seller_id or "SELLER-001",
+            buyer_id=p.buyer_id or "BUYER-001",
+            license_type=p.license_type or "exclusive",
+            k_tx=p.k_tx or "K_tx_symmetric_credential_secret_777",
+            watermark_length=p.watermark_length or "auto",
+        )
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/commit_watermark")
+def commit_watermark_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.commit_original_watermark()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/split_watermark")
+def split_watermark_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.split_and_protect_watermark()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/commit_embedded_watermark")
+def commit_embedded_watermark_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.commit_embedded_watermark()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/embed_watermark")
+def embed_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
+    mgr = TransactionManager.get_instance()
+    p = req or ContinueWatermarkRequest()
+    try:
+        st = mgr.embed_watermark_in_rtl(
+            watermark_length=p.watermark_length or "auto",
+        )
+        if st.protection_id and st.pipeline_result:
+            active_sessions[st.protection_id] = {
+                "protected_verilog": st.watermarked_RTL,
+                "original_verilog": st.original_RTL,
+                "benchmark_id": st.design_id,
+                "structural_encoding": st.secured_encoding_E_S,
+            }
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/calculate_secured_encoding")
+def calculate_secured_encoding_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.calculate_secured_encoding()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/compare_encodings")
+def compare_encodings_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.compare_encodings()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/transaction/verify_behavioral")
+def verify_behavioral_endpoint():
+    mgr = TransactionManager.get_instance()
+    try:
+        st = mgr.verify_behavioral_validation()
+        return {"state": st.model_dump()}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/transaction/continue_watermark")
 def continue_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
     mgr = TransactionManager.get_instance()
