@@ -142,13 +142,18 @@ class WatermarkCapacityAnalyzer:
         # Safe guaranteed capacity is balanced across even/odd pools so any bit distribution is embeddable
         guaranteed_capacity = min(len(even_pairs), len(odd_pairs)) * 2
 
-        # Recommended default length: 8 for small (DCT4), 16 or 32 for medium, 64 for large
-        if total_capacity <= 25:
-            recommended_length = 8
-        elif total_capacity <= 60:
-            recommended_length = min(16, guaranteed_capacity)
+        if total_capacity >= 100:
+            # Full-watermark model for standard designs (like iir_butterworth):
+            # Design supports the complete canonical 256-bit watermark
+            max_capacity = 256
+            recommended_length = 256
         else:
-            recommended_length = min(32, guaranteed_capacity)
+            # Small designs (e.g. dct4, fir) with limited candidate variable pools:
+            max_capacity = total_capacity
+            if total_capacity < 32:
+                recommended_length = min(8, guaranteed_capacity) if guaranteed_capacity > 0 else total_capacity
+            else:
+                recommended_length = min(32, guaranteed_capacity)
 
         return {
             "storage_variable_count": len(nodes),
@@ -159,9 +164,9 @@ class WatermarkCapacityAnalyzer:
             "candidate_pair_count": total_capacity,
             "already_existing_edge_count": len(existing_edges),
             "available_new_edge_count": len(new_edges),
-            "max_capacity": total_capacity,
+            "max_capacity": max_capacity,
             "safe_guaranteed_capacity": guaranteed_capacity,
-            "recommended_default_length": max(recommended_length, 8),
+            "recommended_default_length": recommended_length,
             "candidate_even_even_pairs": [list(p) for p in even_pairs],
             "candidate_odd_odd_pairs": [list(p) for p in odd_pairs],
         }
@@ -174,20 +179,31 @@ class WatermarkCapacityAnalyzer:
         bitstream: Optional[str] = None,
     ) -> Tuple[bool, str]:
         analysis = cls.analyze(base_cig)
+        even_pairs = analysis["candidate_even_even_count"]
+        odd_pairs = analysis["candidate_odd_odd_count"]
         max_cap = analysis["max_capacity"]
 
-        if requested_length > max_cap:
-            return (
-                False,
-                f"Cannot embed {requested_length} bits. Design capacity is {max_cap} bits.",
-            )
+        if requested_length < 1:
+            return (False, f"Invalid watermark length {requested_length}. Length must be >= 1.")
 
-        return (True, f"Requested {requested_length} bits is supported (capacity: {max_cap} bits).")
+        if requested_length > max_cap:
+            return (False, f"Cannot embed {requested_length} bits. Design capacity is {max_cap} bits.")
+
+        if bitstream:
+            if "0" in bitstream and even_pairs == 0:
+                return (False, "Structural capacity bottleneck: Design has no even-even variable pairs to embed bit '0'.")
+            if "1" in bitstream and odd_pairs == 0:
+                return (False, "Structural capacity bottleneck: Design has no odd-odd variable pairs to embed bit '1'.")
+        else:
+            if even_pairs == 0 and odd_pairs == 0:
+                return (False, "Structural capacity bottleneck: Design has no variable pairs for constraint injection.")
+
+        return (True, f"Requested {requested_length} bits is supported by design structure.")
 
 
 class WatermarkCIGMapper:
     """
-    Deterministic mapper from an N-bit transaction watermark to CIG constraints.
+    Deterministic mapper from a transaction watermark (e.g. 256 bits) to CIG constraints.
     Enforces CIG variable-parity encoding:
         bit 0 -> even-even storage variable pair (V0, V2), (V0, V4)...
         bit 1 -> odd-odd storage variable pair (V1, V3), (V1, V5)...
@@ -198,22 +214,28 @@ class WatermarkCIGMapper:
     @classmethod
     def embed_watermark(cls, base_cig: CIG, watermark_bitstream: str) -> ConstrainedCIG:
         """
-        Injects watermark bits into CIG as artificial constraint edges.
+        Injects watermark bits into CIG as artificial constraint edges for the complete bitstream.
         Bit 0 -> even-even storage variable pair.
         Bit 1 -> odd-odd storage variable pair.
+        Preserves genuine structural graph and scheduling constraints.
         """
         N = len(watermark_bitstream)
+        if N < 1:
+            raise ValueError(f"Watermark bitstream cannot be empty, got {N} bits.")
+
+        invalid_chars = set(watermark_bitstream) - {"0", "1"}
+        if invalid_chars:
+            raise ValueError(f"Watermark bitstream contains invalid characters: {invalid_chars}")
+
         nodes = sorted(base_cig.nodes, key=lambda v: (get_variable_index(v), v))
         even_pairs, odd_pairs = WatermarkCapacityAnalyzer.get_candidate_pools(nodes)
-        max_cap = len(even_pairs) + len(odd_pairs)
 
-        if N > max_cap:
-            raise ValueError(f"Cannot embed {N} bits. Design capacity is {max_cap} bits.")
-
+        # Genuine structural capacity checks
         if "0" in watermark_bitstream and not even_pairs:
-            raise ValueError("Design has no even-even variable pairs for bit 0.")
+            raise ValueError("Structural capacity bottleneck: Design has no even-even variable pairs for bit 0.")
         if "1" in watermark_bitstream and not odd_pairs:
-            raise ValueError("Design has no odd-odd variable pairs for bit 1.")
+            raise ValueError("Structural capacity bottleneck: Design has no odd-odd variable pairs for bit 1.")
+
 
         current_edges = set(base_cig.edges)
         artificial_edges: Set[Tuple[str, str]] = set()

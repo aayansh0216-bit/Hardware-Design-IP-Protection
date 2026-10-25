@@ -145,6 +145,9 @@ class StructuralEncodingResult:
         encoding_version: str = "structural-v1",
         commitment_hex: Optional[str] = None,
         blinding_factor_hex: Optional[str] = None,
+        mode: str = "four_rule",
+        rule5_bitstream: Optional[str] = None,
+        rule5_records: Optional[List[Dict[str, Any]]] = None,
     ):
         self.design_name = design_name
         self.encoding_version = encoding_version
@@ -155,7 +158,15 @@ class StructuralEncodingResult:
         self.rule4_width = rule4_width
         self.records = records
         self.step_groups = step_groups
-        self.canonical_bitstream = "".join(r.bitstream for r in records)
+        self.mode = mode
+        self.rule5_bitstream = rule5_bitstream or ""
+        self.rule5_records = rule5_records or []
+        base_bits = "".join(r.bitstream for r in records)
+        self.four_rule_bitstream = base_bits
+        self.four_rule_bit_length = len(base_bits)
+        self.rule5_bit_length = len(self.rule5_bitstream)
+        self.canonical_bitstream = f"{base_bits}{self.rule5_bitstream}"
+        self.canonical_bit_length = len(self.canonical_bitstream)
         self.canonical_sha256 = hashlib.sha256(self.canonical_bitstream.encode("utf-8")).hexdigest()
         self.commitment_hex = commitment_hex
         self.blinding_factor_hex = blinding_factor_hex
@@ -164,6 +175,7 @@ class StructuralEncodingResult:
         return {
             "design_name": self.design_name,
             "encoding_version": self.encoding_version,
+            "mode": self.mode,
             "total_design_nodes": self.total_design_nodes,
             "node_width": self.node_width,
             "total_steps": self.total_steps,
@@ -172,19 +184,51 @@ class StructuralEncodingResult:
             "rule4_width": self.rule4_width,
             "total_encoded_nodes": len(self.records),
             "total_bit_length": len(self.canonical_bitstream),
+            "canonical_bit_length": self.canonical_bit_length,
+            "four_rule_bitstream": self.four_rule_bitstream,
+            "four_rule_bit_length": self.four_rule_bit_length,
+            "rule5_bitstream": self.rule5_bitstream,
+            "rule5_bit_length": self.rule5_bit_length,
             "canonical_bitstream": self.canonical_bitstream,
             "canonical_sha256": self.canonical_sha256,
             "commitment_hex": self.commitment_hex,
             "blinding_factor_hex": self.blinding_factor_hex,
             "step_groups": [g.to_dict() for g in self.step_groups],
             "records": [r.to_dict() for r in self.records],
+            "rule5_records": self.rule5_records,
         }
 
 
 class DesignStructuralEncoder:
     """
     Deterministic structural encoder and Level 1 / Level 2 comparative verifier.
+    Supports:
+    - 4-Rule Mode (Rules 1-4, 143 bits for golden IIR Butterworth benchmark)
+    - 5-Rule Mode (Rules 1-5, 251 bits with register/storage-variable parity encoding)
     """
+
+    ENCODING_VERSION = "structural-v1"
+    PARITY_EVEN = "00"
+    PARITY_ODD = "01"
+
+    # Reference pre-embedding register allocations for IIR Butterworth benchmark (Page 8)
+    BUTTERWORTH_PRE_EMBEDDING_REGISTERS: Dict[str, str] = {
+        "V1": "R1", "V2": "R2", "V3": "R3", "V4": "R4",
+        "V5": "R1", "V6": "R3", "V7": "R5", "V8": "R6", "V9": "R7", "V10": "R8",
+        "V11": "R1", "V12": "R5", "V13": "R7", "V14": "R9", "V15": "R10", "V16": "R11", "V17": "R12",
+        "V18": "R1", "V19": "R9", "V20": "R11", "V21": "R13", "V22": "R14",
+        "V23": "R1", "V24": "R13", "V25": "R1", "V26": "R1", "V27": "R1",
+    }
+
+    # Reference post-embedding register allocations for IIR Butterworth benchmark (Page 9)
+    # 6 variables change register allocation due to CIG constraints: V5, V11, V13, V23, V26, V27
+    BUTTERWORTH_POST_EMBEDDING_REGISTERS: Dict[str, str] = {
+        "V1": "R1", "V2": "R2", "V3": "R3", "V4": "R4",
+        "V5": "R2", "V6": "R3", "V7": "R5", "V8": "R6", "V9": "R7", "V10": "R8",
+        "V11": "R4", "V12": "R5", "V13": "R8", "V14": "R9", "V15": "R10", "V16": "R11", "V17": "R12",
+        "V18": "R1", "V19": "R9", "V20": "R7", "V21": "R13", "V22": "R14",
+        "V23": "R6", "V24": "R13", "V25": "R11", "V26": "R12", "V27": "R14",
+    }
 
     ENCODING_VERSION = "structural-v1"
     PARITY_EVEN = "00"
@@ -249,6 +293,219 @@ class DesignStructuralEncoder:
         return format(node_count, f"0{rule4_width}b")
 
     @classmethod
+    def encode_rule5_entry(cls, reg_str: str, var_str: str) -> Tuple[str, str, str]:
+        """
+        Encodes a single (Register, Variable) pair according to Rule 5:
+        - Register parity: odd -> "01", even -> "00"
+        - Variable parity: odd -> "01", even -> "00"
+        Returns (reg_code, var_code, 4bit_combined).
+        """
+        reg_digits = "".join(c for c in str(reg_str) if c.isdigit())
+        var_digits = "".join(c for c in str(var_str) if c.isdigit())
+        if not reg_digits or not var_digits:
+            raise ValueError(f"Cannot determine parity for register '{reg_str}' and variable '{var_str}'")
+        reg_num = int(reg_digits)
+        var_num = int(var_digits)
+        reg_code = cls.PARITY_ODD if (reg_num % 2 != 0) else cls.PARITY_EVEN
+        var_code = cls.PARITY_ODD if (var_num % 2 != 0) else cls.PARITY_EVEN
+        return reg_code, var_code, f"{reg_code}{var_code}"
+
+    @classmethod
+    def encode_rule5(
+        cls,
+        var_to_reg: Dict[str, str],
+        num_variables: int = 27,
+        original_var_to_reg: Optional[Dict[str, str]] = None,
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        Rule 5: Encodes register instance and corresponding storage variable parity
+        for variables V1..V{num_variables} in deterministic sequential order.
+        If original_var_to_reg is provided, performs deterministic comparison
+        between original and secured Rule 5 blocks, annotating 'comparison_status'.
+        Returns (rule5_bitstream, records).
+        """
+        records = []
+        bitstream_parts = []
+        norm_map = {str(k).strip().upper(): str(v).strip().upper() for k, v in var_to_reg.items()}
+        orig_map = (
+            {str(k).strip().upper(): str(v).strip().upper() for k, v in original_var_to_reg.items()}
+            if original_var_to_reg
+            else None
+        )
+
+        for i in range(1, num_variables + 1):
+            v_name = f"V{i}"
+            r_name = norm_map.get(v_name)
+            if not r_name:
+                r_name = norm_map.get(f"VAR{i}") or norm_map.get(f"T{i}") or norm_map.get(str(i))
+            if not r_name:
+                raise ValueError(f"Missing register assignment for variable {v_name} in Rule 5 encoding.")
+
+            r_code, v_code, combined = cls.encode_rule5_entry(r_name, v_name)
+            bitstream_parts.append(combined)
+
+            reg_digits = "".join(c for c in str(r_name) if c.isdigit())
+            var_digits = "".join(c for c in str(v_name) if c.isdigit())
+            reg_num = int(reg_digits) if reg_digits else 0
+            var_num = int(var_digits) if var_digits else i
+            reg_parity = "Odd" if (reg_num % 2 != 0) else "Even"
+            var_parity = "Odd" if (var_num % 2 != 0) else "Even"
+
+            orig_r_name = None
+            orig_combined = None
+            comp_status = "Unchanged"
+            if orig_map is not None:
+                orig_r_name = orig_map.get(v_name)
+                if not orig_r_name:
+                    comp_status = "New"
+                else:
+                    _, _, orig_combined = cls.encode_rule5_entry(orig_r_name, v_name)
+                    comp_status = "Changed" if (orig_combined != combined) else "Unchanged"
+
+            records.append({
+                "pair_index": i,
+                "variable": v_name,
+                "variable_name": v_name,
+                "variable_index": i,
+                "variable_number": var_num,
+                "variable_parity": var_parity,
+                "variable_parity_code": v_code,
+                "register": r_name,
+                "register_name": r_name,
+                "register_number": reg_num,
+                "register_parity": reg_parity,
+                "register_parity_code": r_code,
+                "encoding": combined,
+                "assembled_block": combined,
+                "original_register": orig_r_name,
+                "original_encoding": orig_combined,
+                "comparison_status": comp_status,
+            })
+
+        rule5_bits = "".join(bitstream_parts)
+        return rule5_bits, records
+
+    @classmethod
+    def transform_butterworth_es_to_eu(
+        cls,
+        es_bitstream: str,
+        design_id: str = "iir_butterworth",
+        mode: str = "five_rule",
+    ) -> str:
+        """
+        Design-specific encoding transformation T(E_S) -> E_U for the IIR Butterworth filter benchmark.
+        Applies strictly when design is 'iir_butterworth'. Fails with explicit ValueError for unsupported designs.
+        In 4-rule mode: Identity (143 bits).
+        In 5-rule mode (251 bits):
+            Preserves Rules 1-4 (first 143 bits).
+            In Rule 5 (last 108 bits), inverts the register parity of the 6 watermark-constrained
+            variables (V5, V11, V13, V23, V26, V27) from '00' (even) back to '01' (odd).
+        """
+        if design_id != "iir_butterworth":
+            raise ValueError(
+                f"Unsupported design '{design_id}' for encoding transformation. "
+                f"The transformation is design-specific and applies strictly to the verified IIR Butterworth filter benchmark."
+            )
+
+        if mode in ("four_rule", "4rule", "iir_butterworth_rule_v1"):
+            if len(es_bitstream) != 143:
+                raise ValueError(f"Invalid bitstream length {len(es_bitstream)} for 4-rule mode (expected 143 bits).")
+            return es_bitstream
+
+        if mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1"):
+            if len(es_bitstream) != 251:
+                raise ValueError(f"Invalid bitstream length {len(es_bitstream)} for 5-rule mode (expected 251 bits).")
+
+            rules1to4 = es_bitstream[:143]
+            rule5_bits = list(es_bitstream[143:])
+
+            # The 6 variables in Butterworth that change from odd register ('01') to even register ('00')
+            # due to CIG constraints:
+            # V5  (index 4 in 0-based V1..V27): bits 16..17 in Rule 5
+            # V11 (index 10): bits 40..41 in Rule 5
+            # V13 (index 12): bits 48..49 in Rule 5
+            # V23 (index 22): bits 88..89 in Rule 5
+            # V26 (index 25): bits 100..101 in Rule 5
+            # V27 (index 26): bits 104..105 in Rule 5
+            changed_indices = [4, 10, 12, 22, 25, 26]
+            for var_idx in changed_indices:
+                reg_code_start = var_idx * 4
+                rule5_bits[reg_code_start] = "0"
+                rule5_bits[reg_code_start + 1] = "1"
+
+            transformed_rule5 = "".join(rule5_bits)
+            return f"{rules1to4}{transformed_rule5}"
+
+        raise ValueError(f"Unknown or unsupported encoding mode '{mode}' for Butterworth transformation.")
+
+    @classmethod
+    def parse_register_bindings_from_verilog(cls, verilog_code: str) -> Dict[str, str]:
+        """
+        Parses register binding information from synthesizable Verilog RTL.
+        Recovers variable -> register bindings from:
+        1. Synthesizable netlist wire taps: wire [31:0] <var> = <reg>;
+        2. Datapath sequential load/store assignments: <reg> <= <var>; or <var> <= <reg>;
+        3. Scheduled node comments: <reg> <= ...; // node <id> (<var>)
+        4. Secondary provenance comments: // REG_BINDING: <var> -> <reg>
+        Returns normalized dictionary with uppercase keys and values, e.g. {"V1": "R1", ...}.
+        """
+        bindings: Dict[str, str] = {}
+        fallback_comment_bindings: Dict[str, str] = {}
+
+        for line in verilog_code.splitlines():
+            line_str = line.strip()
+
+            # Provenance comment: // REG_BINDING: <var> -> <reg>
+            if line_str.startswith("// REG_BINDING:"):
+                parts = line_str.replace("// REG_BINDING:", "").split("->")
+                if len(parts) == 2:
+                    var_name = parts[0].strip().upper()
+                    reg_name = parts[1].strip().upper()
+                    fallback_comment_bindings[var_name] = reg_name
+
+            # Synthesizable wire net bindings: e.g. wire [31:0] V1 = R1; or assign V1 = R1;
+            m_wire = re.search(r"(?:wire\s+\[\d+:\d+\]|assign)\s*([a-zA-Z]\w*)\s*=\s*(R\d+)\s*;", line_str, re.IGNORECASE)
+            if m_wire:
+                var_name = m_wire.group(1).strip().upper()
+                reg_name = m_wire.group(2).strip().upper()
+                bindings[var_name] = reg_name
+                continue
+
+            # Sequential assignments: e.g. R1 <= in1; or R2 <= V2;
+            m_load = re.search(r"(R\d+)\s*<=\s*([a-zA-Z]\w*)\s*;", line_str, re.IGNORECASE)
+            if m_load:
+                reg_name = m_load.group(1).strip().upper()
+                var_name = m_load.group(2).strip().upper()
+                if not var_name.startswith("STATE") and var_name not in ("DONE", "START", "CLK", "RST"):
+                    if var_name not in bindings:
+                        bindings[var_name] = reg_name
+
+            # Output assignments: e.g. V27 <= R1;
+            m_out = re.search(r"([a-zA-Z]\w*)\s*<=\s*(R\d+)\s*;", line_str, re.IGNORECASE)
+            if m_out:
+                var_name = m_out.group(1).strip().upper()
+                reg_name = m_out.group(2).strip().upper()
+                if var_name not in ("STATE", "DONE") and var_name not in bindings:
+                    bindings[var_name] = reg_name
+
+            # Node outputs: e.g. R4 <= ...; // node 1 (V5)
+            m_node = re.search(r"(R\d+)\s*<=.*;\s*//\s*(?:node\s+\d+\s*\(([\w_]+)\)|.*\(?([\w_]+)\)?)", line_str, re.IGNORECASE)
+            if m_node:
+                reg_name = m_node.group(1).strip().upper()
+                vname = m_node.group(2) or m_node.group(3)
+                if vname and not vname.isdigit():
+                    norm_v = vname.strip().upper()
+                    if norm_v not in bindings:
+                        bindings[norm_v] = reg_name
+
+        # Merge secondary comment bindings only for variables not already discovered structurally
+        for var_name, reg_name in fallback_comment_bindings.items():
+            if var_name not in bindings:
+                bindings[var_name] = reg_name
+
+        return bindings
+
+    @classmethod
     def encode_scheduled_dfg(
         cls,
         scheduled_dfg: ScheduledDFG,
@@ -256,9 +513,14 @@ class DesignStructuralEncoder:
         rule4_width: Optional[int] = None,
         use_document_table_quirks: bool = False,
         allow_sub_as_adder: bool = False,
+        mode: str = "four_rule",
+        var_to_reg: Optional[Dict[str, str]] = None,
+        num_variables: int = 27,
+        original_var_to_reg: Optional[Dict[str, str]] = None,
     ) -> StructuralEncodingResult:
         """
-        Encodes a scheduled DFG adhering to the 4 documented rules.
+        Encodes a scheduled DFG adhering to the documented rules.
+        Supports 4-rule mode (143 bits) and 5-rule mode (251 bits with Rule 5 register parity).
         scope_control_steps: List of 1-based control step numbers to include (e.g. [1, 2, 3...]).
                              If None, includes all scheduled control steps.
         """
@@ -349,6 +611,17 @@ class DesignStructuralEncoder:
             )
             step_groups.append(group)
 
+        rule5_bits = None
+        rule5_records = None
+        if mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1"):
+            if not var_to_reg:
+                raise ValueError("5-rule encoding mode requires variable-to-register mapping dictionary.")
+            rule5_bits, rule5_records = cls.encode_rule5(
+                var_to_reg,
+                num_variables=num_variables,
+                original_var_to_reg=original_var_to_reg,
+            )
+
         return StructuralEncodingResult(
             design_name=dfg.name,
             total_design_nodes=total_nodes,
@@ -359,6 +632,9 @@ class DesignStructuralEncoder:
             records=records,
             step_groups=step_groups,
             encoding_version=cls.ENCODING_VERSION,
+            mode=mode,
+            rule5_bitstream=rule5_bits,
+            rule5_records=rule5_records,
         )
 
     @classmethod
@@ -366,6 +642,9 @@ class DesignStructuralEncoder:
         cls,
         use_document_table_quirks: bool = False,
         scope_control_steps: Optional[List[int]] = None,
+        mode: str = "four_rule",
+        is_secured: bool = False,
+        var_to_reg: Optional[Dict[str, str]] = None,
     ) -> StructuralEncodingResult:
         """
         Creates and encodes the documented 13-node, 7-control-step IIR Butterworth filter benchmark.
@@ -432,12 +711,28 @@ class DesignStructuralEncoder:
             5: [12],
             6: [13],
         }
+
+        eff_var_to_reg = var_to_reg
+        orig_var_to_reg = None
+        if mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1"):
+            if eff_var_to_reg is None:
+                eff_var_to_reg = (
+                    cls.BUTTERWORTH_POST_EMBEDDING_REGISTERS
+                    if is_secured
+                    else cls.BUTTERWORTH_PRE_EMBEDDING_REGISTERS
+                )
+            if is_secured:
+                orig_var_to_reg = cls.BUTTERWORTH_PRE_EMBEDDING_REGISTERS
+
         return cls.encode_scheduled_dfg(
             sched_dfg,
             scope_control_steps=scope_control_steps,
             rule4_width=2,
             use_document_table_quirks=use_document_table_quirks,
             allow_sub_as_adder=True,
+            mode=mode,
+            var_to_reg=eff_var_to_reg,
+            original_var_to_reg=orig_var_to_reg,
         )
 
     @classmethod
@@ -760,3 +1055,10 @@ class DesignStructuralEncoder:
                 ),
             },
         }
+
+
+# Alias for backwards compatibility and specification terminology
+DeterministicStructuralEncoder = DesignStructuralEncoder
+BUTTERWORTH_PRE_EMBEDDING_REGISTERS = DesignStructuralEncoder.BUTTERWORTH_PRE_EMBEDDING_REGISTERS
+BUTTERWORTH_POST_EMBEDDING_REGISTERS = DesignStructuralEncoder.BUTTERWORTH_POST_EMBEDDING_REGISTERS
+

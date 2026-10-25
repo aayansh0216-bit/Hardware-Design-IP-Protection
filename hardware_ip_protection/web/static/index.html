@@ -58,6 +58,14 @@
                     </svg>
                     <span>Verifier Profile</span>
                 </button>
+                <button class="tab-btn" data-tab="profileJudge" id="btnNavJudge">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3">
+                        </path>
+                    </svg>
+                    <span>Judge Profile</span>
+                </button>
             </nav>
         </div>
     </header>
@@ -109,8 +117,8 @@
                 <div class="seller-tx-info-grid">
                     <div class="seller-tx-chip"><span class="chip-label">Seller:</span> <strong>SELLER-001</strong></div>
                     <div class="seller-tx-chip"><span class="chip-label">Buyer:</span> <strong>BUYER-001</strong></div>
-                    <div class="seller-tx-chip"><span class="chip-label">Design:</span> <strong>IIR Butterworth Filter</strong></div>
-                    <div class="seller-tx-chip"><span class="chip-label">Encoding Rule:</span> <strong>IIR Butterworth Encoding Rule</strong></div>
+                    <div class="seller-tx-chip"><span class="chip-label">Design:</span> <strong id="sellerTopDesign">IIR Butterworth Filter</strong></div>
+                    <div class="seller-tx-chip"><span class="chip-label">Encoding Rule:</span> <strong id="sellerTopEncodingRule">IIR Butterworth Encoding Rule</strong></div>
                 </div>
 
                 <!-- Status Grid: Buyer Request, Contribution, Commitment, Transaction Details -->
@@ -197,6 +205,16 @@
                                 <div class="seller-nav-status" id="sellerNavStatusEvidence">Confidential Secrets</div>
                             </div>
                             <span class="seller-nav-dot" id="sellerNavDotEvidence"></span>
+                        </button>
+
+                        <!-- Final Section C: Technical Cost & Overhead Report -->
+                        <button type="button" class="seller-nav-item seller-nav-evidence-item" data-seller-stage="report" id="sellerNavItemReport">
+                            <div class="seller-nav-num">C</div>
+                            <div class="seller-nav-info">
+                                <div class="seller-nav-label">Report</div>
+                                <div class="seller-nav-status" id="sellerNavStatusReport">Cost &amp; Overhead</div>
+                            </div>
+                            <span class="seller-nav-dot" id="sellerNavDotReport"></span>
                         </button>
                     </nav>
 
@@ -373,7 +391,7 @@
 
                             <div class="seller-substage-body" id="sellerSubstage1ABody">
                                 <div id="sellerSubstage1AControls">
-                                    <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+                                    <p id="sellerSubstage1ADesc" style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.85rem;">
                                         The original scheduled design is encoded using the selected four-rule structural encoding.
                                     </p>
 
@@ -387,15 +405,17 @@
                                         <div class="form-group" style="margin-bottom: 0;">
                                             <label for="sellerRuleSelect">Select Encoding Rule</label>
                                             <select id="sellerRuleSelect" class="form-select">
-                                                <option value="iir_butterworth_rule_v1" selected>IIR Butterworth Encoding Rule</option>
+                                                <option value="iir_butterworth_rule_v1" selected>IIR Butterworth 4-Rule Encoding (143 bits, E_S == D)</option>
+                                                <option value="iir_butterworth_5rule_v1">IIR Butterworth 5-Rule Encoding (251 bits, E_S != D)</option>
                                             </select>
                                         </div>
                                     </div>
 
                                     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.85rem;">
-                                        <span class="badge badge-v1">design_id: iir_butterworth</span>
-                                        <span class="badge badge-v1">rule_id: iir_butterworth_rule_v1</span>
-                                        <span class="badge badge-v1">version: 1.0</span>
+                                        <span class="badge badge-v1" id="sellerMetaDesignId">design_id: iir_butterworth</span>
+                                        <span class="badge badge-v1" id="sellerMetaRuleId">rule_id: iir_butterworth_rule_v1</span>
+                                        <span class="badge badge-v1" id="sellerMetaRuleVer">version: 1.0</span>
+                                        <span class="badge badge-v1" id="sellerMetaTransformReq">E_S == D (Invariant)</span>
                                     </div>
 
                                     <button type="button" id="btnSellerEncodeD" class="btn-primary" style="margin-bottom: 0.5rem;">
@@ -410,11 +430,11 @@
                                 <div id="sellerEncodingSummaryBox" class="value-card-highlight" style="display: none; margin-top: 0.75rem;">
                                     <div style="display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 0.35rem;">
                                         <span>Design:</span>
-                                        <strong>IIR Butterworth Filter</strong>
+                                        <strong id="sellerSummaryDesign">IIR Butterworth Filter</strong>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 0.35rem;">
                                         <span>Encoding Rule:</span>
-                                        <strong>IIR Butterworth Encoding Rule</strong>
+                                        <strong id="sellerSummaryEncodingRule">IIR Butterworth Encoding Rule</strong>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; font-size: 0.76rem; margin-bottom: 0.45rem;">
                                         <span>Original Encoding Length:</span>
@@ -474,6 +494,14 @@
                                             </div>
                                         </div>
 
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; margin-top: 0.5rem;">
+                                            <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary);">
+                                                <span>Table A: Original Four-Rule Node Table</span>
+                                                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal; margin-left: 0.4rem;">(Rules 1–4 · Node Blocks N1..N13)</span>
+                                            </div>
+                                            <span class="badge badge-v1" id="protEncTableABadge">143 bits</span>
+                                        </div>
+
                                         <div class="table-responsive">
                                             <table class="reg-table" id="protEncTable">
                                                 <thead>
@@ -491,13 +519,50 @@
                                             </table>
                                         </div>
 
+                                        <!-- Table B: Fifth-Rule Register-Variable Table -->
+                                        <div id="protEncTableBSection" style="margin-top: 1.25rem;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                                <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-primary);">
+                                                    <span>Table B: Fifth-Rule Register-Variable Parity Table</span>
+                                                    <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal; margin-left: 0.4rem;">(Rule 5 · Reg-Var Pairs P1..P27)</span>
+                                                </div>
+                                                <span class="badge badge-v1" id="protEncTableBBadge">108 bits</span>
+                                            </div>
+                                            <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                                                <table class="reg-table" id="protEncTableB">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>#</th>
+                                                            <th>Register</th>
+                                                            <th>Reg Parity</th>
+                                                            <th>Reg Parity Bits</th>
+                                                            <th>Storage Var</th>
+                                                            <th>Var Parity</th>
+                                                            <th>Var Parity Bits</th>
+                                                            <th>Assembled 4b Block</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="protEncTableBBody"></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
                                         <div style="margin-top: 1rem;">
-                                            <details class="raw-json-details">
+                                            <details class="raw-json-details" open>
                                                 <summary class="raw-json-summary">
-                                                    <span>View Canonical Structural Bitstream</span>
+                                                    <span>View Canonical Structural Bitstream (E_U = E4 || R5)</span>
                                                     <span class="badge badge-v1" id="protEncBitstreamBadge">0 bits</span>
                                                 </summary>
                                                 <div style="margin-top: 0.75rem;">
+                                                    <div id="protEncBoundaryNotice" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; font-size: 0.72rem;">
+                                                        <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4);">
+                                                            Component 1: Four-Rule Node Stream (Bits 0–142, 143 bits)
+                                                        </span>
+                                                        <span style="color: var(--text-muted); align-self: center; font-weight: bold;">||</span>
+                                                        <span class="badge" id="protEncBoundaryR5Badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4);">
+                                                            Component 2: Rule 5 Reg-Var Stream (Bits 143–250, 108 bits)
+                                                        </span>
+                                                    </div>
                                                     <div id="protEncBitstreamBox" class="code-box"
                                                         style="word-break: break-all; font-family: var(--font-mono); font-size: 0.78rem; max-height: 180px;">
                                                     </div>
@@ -1014,12 +1079,108 @@
                                 </button>
 
                                 <div id="sellerStageEsContent" style="display: none;">
-                                    <details class="raw-json-details" style="margin-bottom: 0.5rem;" open>
-                                        <summary class="raw-json-summary" style="font-size: 0.72rem; padding: 0.3rem 0.5rem;">
-                                            <span>View Reconstructed Bitstream E_S (143 bits)</span>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <div class="report-stat-box" style="padding: 0.5rem;">
+                                            <span class="report-stat-lbl">Encoding Mode</span>
+                                            <span class="report-stat-num" id="secEncMode" style="font-size: 0.95rem;">five_rule</span>
+                                        </div>
+                                        <div class="report-stat-box" style="padding: 0.5rem;">
+                                            <span class="report-stat-lbl">Four-Rule (E4_sec)</span>
+                                            <span class="report-stat-num" id="secEncFourRuleBits" style="font-size: 0.95rem;">143 bits</span>
+                                        </div>
+                                        <div class="report-stat-box" style="padding: 0.5rem;">
+                                            <span class="report-stat-lbl">Rule 5 (R5_sec)</span>
+                                            <span class="report-stat-num" id="secEncRule5Bits" style="font-size: 0.95rem;">108 bits</span>
+                                        </div>
+                                        <div class="report-stat-box" style="padding: 0.5rem;">
+                                            <span class="report-stat-lbl">Total E_S Length</span>
+                                            <span class="report-stat-num status-match" id="secEncTotalBits" style="font-size: 0.95rem;">251 bits</span>
+                                        </div>
+                                    </div>
+
+                                    <details class="raw-json-details" style="margin-bottom: 0.75rem;" open>
+                                        <summary class="raw-json-summary" style="font-size: 0.76rem; padding: 0.35rem 0.5rem;">
+                                            <span>Detailed Secured Encoding Tables (Table A & Table B)</span>
+                                            <span class="badge badge-v1" id="secEncTablesBadge">13 nodes · 27 pairs</span>
                                         </summary>
-                                        <div id="sellerStageEsBitstream" class="code-box" style="font-size: 0.72rem; max-height: 70px; word-break: break-all; margin-top: 0.35rem;">--</div>
+                                        <div style="margin-top: 0.75rem;">
+                                            <!-- Secured Table A -->
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                                <div style="font-weight: 600; font-size: 0.8rem; color: var(--text-primary);">
+                                                    <span>Table A: Secured Four-Rule Node Table</span>
+                                                    <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 0.3rem;">(Post-Embedding Structural Operations)</span>
+                                                </div>
+                                                <span class="badge badge-v1" id="secEncTableABadge">143 bits</span>
+                                            </div>
+                                            <div class="table-responsive" style="max-height: 220px; overflow-y: auto; margin-bottom: 1rem;">
+                                                <table class="reg-table" id="secEncTable">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Step</th>
+                                                            <th>Node</th>
+                                                            <th>Rule 1 (CS/Node Parity)</th>
+                                                            <th>Rule 2 (Node ID)</th>
+                                                            <th>Rule 3 (Op Type)</th>
+                                                            <th>Rule 4 (Step Count)</th>
+                                                            <th>Encoded Assembled Block</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="secEncTableBody"></tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- Secured Table B -->
+                                            <div id="secEncTableBSection">
+                                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                                                    <div style="font-weight: 600; font-size: 0.8rem; color: var(--text-primary);">
+                                                        <span>Table B: Secured Fifth-Rule Register-Variable Table</span>
+                                                        <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 0.3rem;">(Post-Embedding Allocation)</span>
+                                                    </div>
+                                                    <span class="badge badge-v1" id="secEncTableBBadge">108 bits (27 pairs)</span>
+                                                </div>
+                                                <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+                                                    <table class="reg-table" id="secEncTableB">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>#</th>
+                                                                <th>Register</th>
+                                                                <th>Reg Parity</th>
+                                                                <th>Reg Parity Bits</th>
+                                                                <th>Storage Var</th>
+                                                                <th>Var Parity</th>
+                                                                <th>Var Parity Bits</th>
+                                                                <th>Assembled 4b Block</th>
+                                                                <th>Status</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="secEncTableBBody"></tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </details>
+
+                                    <!-- Canonical Secured Bitstream Details -->
+                                    <details class="raw-json-details" style="margin-bottom: 0.5rem;" open>
+                                        <summary class="raw-json-summary" style="font-size: 0.74rem; padding: 0.35rem 0.5rem;">
+                                            <span>View Reconstructed Canonical Bitstream E_S</span>
+                                            <span class="badge badge-v1" id="sellerStageEsBadge">Reconstructed (251 bits)</span>
+                                        </summary>
+                                        <div style="margin-top: 0.5rem;">
+                                            <div id="secEncBoundaryNotice" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; font-size: 0.72rem;">
+                                                <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4);">
+                                                    Component 1: Secured Four-Rule Stream (Bits 0–142, 143 bits)
+                                                </span>
+                                                <span style="color: var(--text-muted); align-self: center; font-weight: bold;">||</span>
+                                                <span class="badge" id="secEncBoundaryR5Badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4);">
+                                                    Component 2: Secured Rule 5 Stream (Bits 143–250, 108 bits)
+                                                </span>
+                                            </div>
+                                            <div id="sellerStageEsBitstreamFormatted" class="code-box" style="font-size: 0.74rem; max-height: 100px; word-break: break-all; margin-top: 0.35rem; font-family: var(--font-mono);">--</div>
+                                            <div id="sellerStageEsBitstream" class="code-box" style="display: none; font-size: 0.72rem; max-height: 70px; word-break: break-all; margin-top: 0.35rem;">--</div>
+                                        </div>
+                                    </details>
+
                                     <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
                                         <button type="button" id="btnProceedTo4C" class="btn-secondary" style="width: auto; padding: 0.35rem 0.85rem; font-size: 0.76rem;">
                                             <span>Proceed to Substage 4C: Compare Encodings &rarr;</span>
@@ -1250,14 +1411,16 @@
                                     <div
                                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
                                         <strong style="color: #a78bfa; font-size: 0.82rem;">C_ES: Secured Encoding Commitment</strong>
-                                        <span class="badge badge-v1" style="font-size: 0.68rem;">Not Required (E_S = D)</span>
+                                        <span id="badgeCesStatus" class="badge badge-v1" style="font-size: 0.68rem;">Not Required (E_S = D)</span>
                                     </div>
                                     <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.4rem;">
                                         Commits to: Secured Encoding E_S &bull; Owner: Seller (SELLER-001)</p>
-                                    <div
+                                    <div id="commCesDesc"
                                         style="font-size: 0.74rem; color: var(--text-muted); font-style: italic; margin-top: 0.3rem;">
                                         Secured encoding commitment not required for this transaction (E_S equals D).
                                     </div>
+                                    <div class="commit-hex-row" id="commCesHexRow" style="display: none; margin-top: 0.4rem;"><span class="commit-hex-lbl">C_ES:</span> <span
+                                            id="commCesHex" class="commit-hex-val">--</span></div>
                                 </div>
                             </div>
 
@@ -1701,7 +1864,7 @@
                                                 style="font-size: 0.72rem; color: var(--text-muted); font-weight: 400;">(Conditional
                                                 &bull; Owner: SELLER-001)</span>
                                         </div>
-                                        <span class="badge badge-v1">Not Required (E_S = D)</span>
+                                        <span id="sellerEvidCesStatus" class="badge badge-v1">Not Required (E_S = D)</span>
                                     </summary>
                                     <div class="evidence-accordion-body">
                                         <!-- Stage 1: Reconstruction Method -->
@@ -1714,21 +1877,20 @@
                                             <div class="method-spec-grid" style="margin-bottom: 0.75rem;">
                                                 <div class="spec-item">
                                                     <span class="spec-item-label">Encoding Method on Secured RTL</span>
-                                                    <span class="spec-item-val">Structural encoding rule
-                                                        <code>iir_butterworth_rule_v1</code> applied to watermarked
-                                                        synthesized RTL.</span>
+                                                    <span class="spec-item-val" id="sellerPrivEsMethod">Structural encoding rule
+                                                        applied to watermarked synthesized RTL.</span>
                                                 </div>
                                                 <div class="spec-item">
                                                     <span class="spec-item-label">Invariance &amp; Conditional
                                                         Analysis</span>
-                                                    <span class="spec-item-val">For IIR Butterworth filter, artificial
+                                                    <span class="spec-item-val" id="sellerPrivEsInvariance">For IIR Butterworth filter, artificial
                                                         register lifetime constraints preserve identical structural
                                                         operations and control step schedule. E_S equals D (143
                                                         bits).</span>
                                                 </div>
                                                 <div class="spec-item">
                                                     <span class="spec-item-label">Dispute Transformation Rule</span>
-                                                    <span class="spec-item-val">Secured encoding commitment and
+                                                    <span class="spec-item-val" id="sellerPrivEsTransformRule">Secured encoding commitment and
                                                         transformation rule not required for this transaction (E_S =
                                                         D).</span>
                                                 </div>
@@ -1748,9 +1910,9 @@
                                                 <span class="stage-pill stage-pill-verify">Stage 2 &bull; Commitment
                                                     Verification Information</span>
                                                 <span style="font-size: 0.72rem; color: var(--text-muted);">Conditional
-                                                    Exemption</span>
+                                                    Exemption / Requirement</span>
                                             </div>
-                                            <p
+                                            <p id="sellerPrivEsVerifyNote"
                                                 style="font-size: 0.76rem; color: var(--text-muted); margin: 0; line-height: 1.5;">
                                                 <strong>Not Required:</strong> Because secured encoding E_S is identical
                                                 to original encoding D, the existing architecture commits to D via C_D.
@@ -1762,8 +1924,337 @@
                                 </details>
                             </div>
                     </div>
+                    </div>
 
-                </div>
+                    <!-- ================================================================= -->
+                    <!-- FINAL SECTION C: TECHNICAL COST AND OVERHEAD REPORT                -->
+                    <!-- ================================================================= -->
+                    <div id="sellerReportCard" class="seller-stage-card" style="display: none;">
+                        <div class="securing-report-container">
+
+                            <!-- Report Header Banner -->
+                            <div class="report-header-banner">
+                                <div class="report-header-title">
+                                    <h2>
+                                        <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        <span>Technical Cost &amp; Overhead Report</span>
+                                    </h2>
+                                    <span style="font-size: 0.8rem; color: var(--text-muted);">
+                                        Comprehensive audit of pipeline execution latency, structural RTL footprint, hardware synthesis overhead, and behavioral verification.
+                                    </span>
+                                    <div class="report-meta-badges">
+                                        <span id="repBadgeStatus" class="badge badge-v1">Status: Checking</span>
+                                        <span id="repBadgeRunId" class="badge badge-v1" style="font-family: var(--font-mono);">Run ID: --</span>
+                                        <span id="repBadgeTime" class="badge badge-v1">Created: --</span>
+                                        <span id="repBadgeTx" class="badge badge-v1" style="color: var(--primary-light);">TX: --</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" id="btnRefreshReport" class="btn-secondary" style="font-size: 0.76rem; padding: 0.4rem 0.8rem;">
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                        </svg>
+                                        <span>Refresh</span>
+                                    </button>
+                                    <button type="button" id="btnExportReportJson" class="btn-primary" style="font-size: 0.76rem; padding: 0.4rem 0.85rem;">
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                        </svg>
+                                        <span>Download Report (JSON)</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Empty State View -->
+                            <div id="repEmptyState" class="report-empty-state" style="display: none;">
+                                <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin: 0 auto 1rem; opacity: 0.4;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <h4 style="color: var(--text-main); margin-bottom: 0.4rem;">No Pipeline Securing Run Yet</h4>
+                                <p style="font-size: 0.8rem; max-width: 480px; margin: 0 auto; line-height: 1.5;">
+                                    Complete the watermarking workflow through Stage 4 to generate a full technical cost and overhead audit report.
+                                </p>
+                            </div>
+
+                            <!-- Error Banner -->
+                            <div id="repErrorBanner" class="alert-box alert-danger" style="display: none; margin-bottom: 1rem;">
+                                <strong id="repErrorTitle">Securing Run Failure:</strong>
+                                <span id="repErrorMessage">--</span>
+                            </div>
+
+                            <!-- Report Content Body -->
+                            <div id="repContentContainer">
+
+                                <!-- SECTION A: Executive KPI Summary -->
+                                <div class="report-section-card">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Executive Summary &amp; High-Level KPIs</span>
+                                        </div>
+                                        <span class="badge badge-v1" id="repSummaryRuleBadge">Rule: Butterworth 5-Rule</span>
+                                    </div>
+                                    <div class="report-kpi-grid">
+                                        <div class="report-kpi-card">
+                                            <span class="report-kpi-label">Pipeline Status</span>
+                                            <span class="report-kpi-value" id="repKpiStatus" style="color: var(--accent-emerald);">--</span>
+                                            <span class="report-kpi-sub" id="repKpiCompletedStages">0 of 4 stages</span>
+                                        </div>
+                                        <div class="report-kpi-card">
+                                            <span class="report-kpi-label">Total Execution Latency</span>
+                                            <span class="report-kpi-value" id="repKpiLatency" style="color: var(--accent-cyan);">-- ms</span>
+                                            <span class="report-kpi-sub">End-to-end pipeline run</span>
+                                        </div>
+                                        <div class="report-kpi-card">
+                                            <span class="report-kpi-label">Flip-Flop Overhead</span>
+                                            <span class="report-kpi-value" id="repKpiRegisters" style="color: #fbbf24;">--</span>
+                                            <span class="report-kpi-sub" id="repKpiRegSub">Register count delta</span>
+                                        </div>
+                                        <div class="report-kpi-card">
+                                            <span class="report-kpi-label">Verification Match</span>
+                                            <span class="report-kpi-value" id="repKpiMatchRate" style="color: var(--accent-emerald);">--</span>
+                                            <span class="report-kpi-sub" id="repKpiVectorsSub">Behavioral test vectors</span>
+                                        </div>
+                                        <div class="report-kpi-card">
+                                            <span class="report-kpi-label">Watermark Payload</span>
+                                            <span class="report-kpi-value" id="repKpiWmLen" style="color: #c084fc;">-- bits</span>
+                                            <span class="report-kpi-sub" id="repKpiWmSub">Embedded vs Total</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION B: Stage-by-Stage Processing Report -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Stage-by-Stage Processing Breakdown</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: var(--text-muted);">Audited Execution Timeline</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table" id="repStagesTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>Stage</th>
+                                                    <th>Substage / Activity</th>
+                                                    <th>Status</th>
+                                                    <th>Elapsed</th>
+                                                    <th>Artifacts &amp; Primary Outputs</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repStagesTableBody">
+                                                <!-- Dynamic rows inserted by app.js -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION C: Structural Encoding Metrics -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Structural Encoding Metrics (Unsecured vs Secured)</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: var(--text-muted);">Encoding Transformation Analysis</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Encoding Attribute</th>
+                                                    <th>Original Design (D)</th>
+                                                    <th>Secured Design (E_S)</th>
+                                                    <th>Delta / Impact</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repEncodingTableBody">
+                                                <!-- Dynamic rows inserted by app.js -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION D: Watermark Embedding Metrics -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Watermark Embedding &amp; CIG Modifications</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: var(--text-muted);">Graph Modification Constraints</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Parameter</th>
+                                                    <th>Baseline (Original)</th>
+                                                    <th>Watermarked (Embedded)</th>
+                                                    <th>Engineering Notes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repWatermarkTableBody">
+                                                <!-- Dynamic rows inserted by app.js -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION E: RTL Generation & Structural Overhead -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>RTL Structural Footprint &amp; Register Allocation</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: var(--text-muted);">Verilog File &amp; Register Metrics</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Metric</th>
+                                                    <th>Original Verilog</th>
+                                                    <th>Watermarked Verilog</th>
+                                                    <th>Overhead / Validation</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repRtlTableBody">
+                                                <!-- Dynamic rows inserted by app.js -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION F: Hardware Cost & Synthesis Overhead -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Hardware Synthesis &amp; Physical Overhead</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: #94a3b8;">Physical Synthesis Audit</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Synthesis Metric</th>
+                                                    <th>Original</th>
+                                                    <th>Watermarked</th>
+                                                    <th>Overhead</th>
+                                                    <th>Measurement Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repHardwareTableBody">
+                                                <tr>
+                                                    <td><strong>Flip-Flops / Hardware Registers</strong></td>
+                                                    <td id="repRegOrig">6 registers</td>
+                                                    <td id="repRegProt">10 registers</td>
+                                                    <td id="repRegDelta" style="color: #fbbf24; font-weight: 700;">+4 (+66.7%)</td>
+                                                    <td><span class="badge badge-success">Direct RTL Extraction</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Logic Area / LUTs / Standard Cells</strong></td>
+                                                    <td>--</td>
+                                                    <td>--</td>
+                                                    <td><span class="report-unavailable-chip">UNAVAILABLE</span></td>
+                                                    <td style="color: var(--text-muted);">Requires ASIC/FPGA Synthesis Tool</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Critical Path Timing (T_cp / F_max)</strong></td>
+                                                    <td>--</td>
+                                                    <td>--</td>
+                                                    <td><span class="report-unavailable-chip">UNAVAILABLE</span></td>
+                                                    <td style="color: var(--text-muted);">Requires Static Timing Analysis Tool</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Dynamic &amp; Leakage Power</strong></td>
+                                                    <td>--</td>
+                                                    <td>--</td>
+                                                    <td><span class="report-unavailable-chip">UNAVAILABLE</span></td>
+                                                    <td style="color: var(--text-muted);">Requires Standard Cell Power Models</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="report-notice-box" id="repHardwareNoticeBox">
+                                        <strong>Host Environment Toolchain Notice:</strong>
+                                        Physical logic synthesis, gate-level area (LUTs/standard-cells), static timing analysis (F_max), and power dissipation metrics require an external ASIC/FPGA synthesis toolchain (e.g. Yosys, Synopsys Design Compiler, or AMD Vivado) and target PDK/standard-cell libraries not installed in this execution environment. Structural flip-flop counts and Register Allocation CIG constraints are computed directly from the synthesized RTL.
+                                    </div>
+                                </div>
+
+                                <!-- SECTION G: Behavioral Verification & Correctness -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Behavioral Correctness &amp; Verification</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: var(--accent-emerald);">Cycle-Accurate Simulation</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Verification Item</th>
+                                                    <th>Observed Result</th>
+                                                    <th>Specification Requirement</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repVerificationTableBody">
+                                                <!-- Dynamic rows inserted by app.js -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION H: Cryptographic Audit References (Safe Hashes) -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Cryptographic Evidence &amp; Public Commitment Hashes</span>
+                                        </div>
+                                        <span style="font-size: 0.72rem; color: var(--text-muted);">Confidentiality Preserved &bull; No Secret Keys Exposed</span>
+                                    </div>
+                                    <div class="report-table-wrapper">
+                                        <table class="report-data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Commitment Target</th>
+                                                    <th>Symbol</th>
+                                                    <th>Elliptic Curve Point (X, Y)</th>
+                                                    <th>Role in Dispute Resolution</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="repCommitmentsTableBody">
+                                                <!-- Dynamic rows inserted by app.js -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- SECTION I: Limitations & Architectural Boundaries -->
+                                <div class="report-section-card" style="margin-top: 1.25rem;">
+                                    <div class="report-section-header">
+                                        <div class="report-section-title">
+                                            <span>Architectural Assumptions &amp; Scope Limitations</span>
+                                        </div>
+                                    </div>
+                                    <ul id="repLimitationsList" style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.6; margin: 0; padding-left: 1.25rem;">
+                                        <li>Structural encoding $D$ and $E_S$ are deterministically bound to the selected DAG schedule, unit boundaries, and variable lifetimes.</li>
+                                        <li>Watermark embedding injects artificial compatibility edges into the Conflict &amp; Compatibility Graph (CIG); registers are allocated via Left-Edge interval graph coloring.</li>
+                                        <li>Hardware latency is cycle-invariant: pipeline execution depth (7 cycles for IIR Butterworth) and primary I/O pin mappings remain identical to original RTL.</li>
+                                        <li>Full gate-level physical area and propagation delay metrics require synthesis against an external target standard-cell library (e.g., TSMC 28nm or SkyWater 130nm).</li>
+                                    </ul>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
             </div>
 
         </div>
@@ -2453,7 +2944,6 @@
                                         <span class="v-step-title-text">Obtain Disputed RTL</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_1">Synthesizable Verilog RTL</span>
                                         <span class="badge badge-warning" id="vStepBadge_1">READY TO EXECUTE</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2522,7 +3012,6 @@
                                         <span class="v-step-title-text">Calculate Secured Design Encoding (E_S)</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_2">4-Rule Structural Encoding · 143 bits</span>
                                         <span class="badge badge-v1" id="vStepBadge_2">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2580,7 +3069,6 @@
                                         <span class="v-step-title-text">Compare Secured and Original Encoding (Invariance &amp; C_ES)</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_3">Invariance Check &amp; Conditional C_ES</span>
                                         <span class="badge badge-v1" id="vStepBadge_3">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2638,7 +3126,6 @@
                                         <span class="v-step-title-text">Transform to Original Encoding &amp; Verify Commitment C_D</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_4">C_D over NIST P-256 · 143 bits</span>
                                         <span class="badge badge-v1" id="vStepBadge_4">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2725,7 +3212,6 @@
                                         <span class="v-step-title-text">Extract Embedded Watermark (W1')</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_5">RTL Binding Extraction · 32 bits</span>
                                         <span class="badge badge-v1" id="vStepBadge_5">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2793,7 +3279,6 @@
                                         <span class="v-step-title-text">Verify Embedded Watermark Commitment (C_W1)</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_6">Commit(W1', r_W1) == C_W1</span>
                                         <span class="badge badge-v1" id="vStepBadge_6">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2858,7 +3343,6 @@
                                         <span class="v-step-title-text">Reconstruct Complete Watermark (W')</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_7">W = W1' || W2 · 256 bits</span>
                                         <span class="badge badge-v1" id="vStepBadge_7">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2926,7 +3410,6 @@
                                         <span class="v-step-title-text">Verify Complete Watermark Commitment (C_W)</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_8">Commit(W', r_W) == C_W</span>
                                         <span class="badge badge-v1" id="vStepBadge_8">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -3015,7 +3498,6 @@
                                         <span class="v-step-title-text">Validate Buyer Contribution Bitstream (B')</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_9">Fingerprint Bitstream · 555 bits</span>
                                         <span class="badge badge-v1" id="vStepBadge_9">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -3083,7 +3565,6 @@
                                         <span class="v-step-title-text">Verify Buyer Commitment (C_B)</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_10">Commit(B', r_B) == C_B</span>
                                         <span class="badge badge-v1" id="vStepBadge_10">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -3172,7 +3653,6 @@
                                         <span class="v-step-title-text">Verify Watermark-Generation Relationship F</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_11">HKDF-SHA256 Derivation</span>
                                         <span class="badge badge-v1" id="vStepBadge_11">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -3244,7 +3724,6 @@
                                         <span class="v-step-title-text">Verify Transaction Evidence &amp; Recorded Rights</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_12">Rights Audit · License vs Ownership</span>
                                         <span class="badge badge-v1" id="vStepBadge_12">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -3337,7 +3816,6 @@
                                         <span class="v-step-title-text">Produce Final Dispute Adjudication Report</span>
                                     </div>
                                     <div class="v-step-header-right">
-                                        <span class="v-step-summary" id="vStepSummary_13">Consolidated Synthesis</span>
                                         <span class="badge badge-v1" id="vStepBadge_13">Pending</span>
                                         <button type="button" class="btn-substage-toggle" title="Toggle step disclosure">
                                             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -4050,6 +4528,495 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- TAB 4: JUDGE-LED INTERROGATION (143-Bit Stage)                     -->
+        <!-- =================================================================== -->
+        <div id="profileJudge" class="tab-pane">
+            <!-- Judge Profile Banner -->
+            <div class="judge-banner">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="profile-badge-judge">Judge Profile</span>
+                            <span style="font-weight: 700; font-size: 1.05rem;">Judge-Led Dispute Interrogation &bull; 143-Bit Four-Rule Stage</span>
+                        </div>
+                        <span style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+                            Role: Presiding Judge &bull; Claimant: Buyer (BUYER-001) &bull; Benchmark: IIR Butterworth Filter (E_U Branch)
+                        </span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                    <button type="button" id="btnJudgeToggleBlock5b" class="btn-secondary" style="font-size: 0.76rem; padding: 0.4rem 0.85rem;" title="Enable/Disable optional Block 5b comparison chain for Experiment B">
+                        <span>Experiment B (Block 5b): <strong id="lblBlock5bState">OFF</strong></span>
+                    </button>
+                    <button type="button" id="btnJudgeResetSession" class="btn-secondary" style="font-size: 0.76rem; padding: 0.4rem 0.85rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;" title="Reset interrogation ledger">
+                        <span>Reset Session</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Judge Profile Workflow Sub-Tabs -->
+            <div class="judge-workflow-nav" id="judgeWorkflowNav">
+                <button type="button" id="tabJudgeSecured" class="judge-wf-tab active" onclick="switchJudgeWorkflow('secured_design_encoding')">
+                    <span style="font-weight: 600;">Secured Design Encoding</span>
+                </button>
+                <button type="button" id="tabJudgeUnsecured" class="judge-wf-tab" onclick="switchJudgeWorkflow('unsecured_design_encoding')">
+                    <span style="font-weight: 600;">Unsecured Design Encoding</span>
+                </button>
+                <button type="button" id="tabJudgeWatermarking" class="judge-wf-tab" onclick="switchJudgeWorkflow('watermarking')">
+                    <span style="font-weight: 600;">Watermark Verification</span>
+                    <span class="badge badge-warning" style="font-size: 0.65rem; margin-left: 0.4rem;">Truthful · Pending</span>
+                </button>
+            </div>
+
+            <!-- Context & Stage Scope Card -->
+            <div class="glass-card" style="margin-bottom: 1.25rem; border-left: 3px solid #8b5cf6;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
+                            <h3 style="margin: 0; font-size: 0.95rem; color: #c084fc;">Session Context: <span id="judgeSessionIdText">Loading...</span></h3>
+                            <span class="badge badge-v1" id="judgeTxBadge">TX-001</span>
+                            <span class="badge badge-info" id="judgeBranchBadge">Branch E_U</span>
+                            <span class="badge badge-v1" id="judgeWorkflowBadge" style="background: rgba(139, 92, 246, 0.25); border-color: #a78bfa; color: #c084fc;">Secured</span>
+                        </div>
+                        <p style="font-size: 0.76rem; color: var(--text-muted); margin: 0; line-height: 1.5;" id="judgeStageScopeText">
+                            <strong>Stage Scope:</strong> Interrogates and progressively reconstructs the hardware design encoding through auditable questions and hard cryptographic constraints.
+                        </p>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="badge" id="judgeStageStatusBadge" style="font-size: 0.76rem; padding: 0.35rem 0.8rem;">IN PROGRESS</span>
+                        <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;" id="judgeStatusSubtext">Interrogating claimant knowledge</div>
+                    </div>
+                </div>
+
+                <!-- Contradiction or Stage Notice -->
+                <div id="judgeAlertBanner" style="display: none; margin-top: 0.85rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem;"></div>
+            </div>
+
+            <!-- Interrogation Grid: Question on Left, Candidate on Right -->
+            <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.5rem; margin-bottom: 1.5rem;" id="judgeMainGrid">
+                
+                <!-- LEFT COLUMN: Progress, Active Question, Hypotheses, History -->
+                <div>
+                    <!-- Progress Card -->
+                    <div class="glass-card" style="margin-bottom: 1.25rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Candidate Space &amp; Reconstruction Progression</span>
+                            <span style="font-size: 0.76rem; font-family: var(--font-mono); color: #c084fc;" id="judgeProgressText">Candidate Space: Unbounded (0% resolved)</span>
+                        </div>
+                        <div style="background: rgba(255, 255, 255, 0.05); height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 0.75rem;">
+                            <div id="judgeProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #06b6d4); transition: width 0.3s ease;"></div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; font-size: 0.72rem; color: var(--text-muted); flex-wrap: wrap;">
+                            <div>Candidate Space: <strong id="judgeStatCandidateSpace" style="color: var(--text-primary);">Unbounded</strong></div>
+                            <div>Resolved Bits: <strong id="judgeStatResolvedBits" style="color: #34d399;">0</strong></div>
+                            <div>Unresolved Bits: <strong id="judgeStatUnresolvedBits" style="color: #fbbf24;">0</strong></div>
+                            <div>P1 Fallback Status: <strong id="judgeStatP1Status" style="color: #fbbf24;">Pending</strong></div>
+                            <div>Contradictions: <strong id="judgeStatContradictions" style="color: #f87171;">0</strong></div>
+                            <span id="judgeStatTotalQ" style="display: none;"></span>
+                            <span id="judgeStatAnsweredQ" style="display: none;"></span>
+                        </div>
+                    </div>
+
+                    <!-- Active Question Card -->
+                    <div id="judgeActiveQuestionContainer">
+                        <div class="judge-question-card" id="judgeQuestionCard">
+                            <div class="judge-question-header">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="judge-question-id-pill" id="judgeCurrentQId">Q0.1</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;" id="judgeCurrentBlockTitle">Block 0: Structure</span>
+                                </div>
+                                <span class="badge badge-v1" id="judgeCurrentQTypeBadge">Integer</span>
+                            </div>
+
+                            <div class="judge-question-prompt" id="judgeCurrentQPrompt">
+                                Loading interrogation question...
+                            </div>
+
+                            <!-- Input and Submit Controls -->
+                            <form id="judgeAnswerForm" onsubmit="return false;">
+                                <div class="judge-input-group">
+                                    <div id="judgeInputWrapper" style="flex: 1; max-width: 320px;">
+                                        <input type="number" id="judgeInputNumber" class="judge-input-field" placeholder="Enter integer answer..." style="width: 100%;" />
+                                        <select id="judgeInputChoice" class="judge-input-field" style="width: 100%; display: none;">
+                                            <option value="">-- Select Response --</option>
+                                            <option value="yes">Yes</option>
+                                            <option value="no">No</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" id="btnJudgeSubmitAnswer" class="judge-btn-submit">
+                                        <span>Submit Answer &rarr;</span>
+                                    </button>
+                                </div>
+                                <div id="judgeInputValidationMsg" style="display: none; margin-top: 0.5rem; font-size: 0.75rem; color: #f87171;"></div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Completed State Message (if all answered) -->
+                    <div id="judgeCompletedCard" class="glass-card" style="display: none; margin-bottom: 1.25rem; border: 1px solid rgba(16, 185, 129, 0.4); text-align: center; padding: 2rem 1.5rem;">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎯</div>
+                        <h3 style="color: #34d399; margin-bottom: 0.5rem; font-size: 1.1rem;">143-Bit Stage Interrogation Complete</h3>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); max-width: 500px; margin: 0 auto 1rem; line-height: 1.5;">
+                            All structural questions have been answered without contradictions. The candidate 143-bit four-rule encoding has been reconstructed. The full 251-bit commitment verification is intentionally deferred until the Rule 5 interrogation stage is implemented.
+                        </p>
+                        <span class="badge badge-success" style="padding: 0.4rem 0.9rem; font-size: 0.78rem;">INCOMPLETE: 143-bit stage complete; Rule 5 interrogation pending</span>
+                    </div>
+
+                    <!-- Contradiction State Card -->
+                    <div id="judgeContradictionCard" class="glass-card" style="display: none; margin-bottom: 1.25rem; border: 1px solid rgba(239, 68, 68, 0.4); padding: 1.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                            <span style="font-size: 1.5rem;">⚠️</span>
+                            <div>
+                                <h4 style="color: #f87171; margin: 0; font-size: 0.95rem;">Contradiction Detected</h4>
+                                <span style="font-size: 0.72rem; color: var(--text-muted);">These answers cannot both be true. Progression halted until corrected.</span>
+                            </div>
+                        </div>
+                        <div id="judgeContradictionDetails" style="font-size: 0.76rem; color: #fca5a5; background: rgba(239, 68, 68, 0.1); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem; font-family: var(--font-mono);"></div>
+                        <p style="font-size: 0.74rem; color: var(--text-muted); margin: 0 0 1rem 0;">
+                            Review earlier answers in the History Accordion below and submit a non-destructive correction to resolve the inconsistency.
+                        </p>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button type="button" class="btn-secondary btn-judge-correct-latest" style="padding: 0.35rem 0.8rem; font-size: 0.76rem;">
+                                ✏️ Correct Answer in Ledger
+                            </button>
+                            <button type="button" class="btn-danger btn-judge-reset-trigger" style="padding: 0.35rem 0.8rem; font-size: 0.76rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">
+                                🔄 Reset Session
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Unsupported Structural Branch State Card -->
+                    <div id="judgeUnsupportedCard" class="glass-card" style="display: none; margin-bottom: 1.25rem; border: 1px solid rgba(239, 68, 68, 0.4); padding: 1.5rem; background: rgba(239, 68, 68, 0.05);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                            <span style="font-size: 1.5rem;">🛑</span>
+                            <div>
+                                <h4 style="color: #f87171; margin: 0; font-size: 0.95rem;">Unsupported Structural Branch</h4>
+                                <span style="font-size: 0.72rem; color: var(--text-muted);">The answered architecture falls outside the 4-rule encoding schema.</span>
+                            </div>
+                        </div>
+                        <div id="judgeUnsupportedDetails" style="font-size: 0.76rem; color: #fca5a5; background: rgba(239, 68, 68, 0.1); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem; font-family: var(--font-mono);"></div>
+                        <p style="font-size: 0.74rem; color: var(--text-muted); margin: 0 0 1rem 0;">
+                            The claimant design describes an alternative structure (e.g. non-uniform units or variable field layouts) that cannot be validated under the four-rule encoding schema. Interrogation cannot proceed along this branch. You can correct the answer in the History Ledger below or reset the session.
+                        </p>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button type="button" class="btn-secondary btn-judge-correct-latest" style="padding: 0.35rem 0.8rem; font-size: 0.76rem;">
+                                ✏️ Correct Answer in Ledger
+                            </button>
+                            <button type="button" class="btn-danger btn-judge-reset-trigger" style="padding: 0.35rem 0.8rem; font-size: 0.76rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">
+                                🔄 Reset Session
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Incomplete Interrogation State Card -->
+                    <div id="judgeIncompleteCard" class="glass-card" style="display: none; margin-bottom: 1.25rem; border: 1px solid rgba(245, 158, 11, 0.4); padding: 1.5rem; background: rgba(245, 158, 11, 0.05);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                            <span style="font-size: 1.5rem;">⏸️</span>
+                            <div>
+                                <h4 style="color: #fbbf24; margin: 0; font-size: 0.95rem;">Interrogation Halted: Incomplete Knowledge</h4>
+                                <span style="font-size: 0.72rem; color: var(--text-muted);">Claimant indicated structure is unknown or indeterminable.</span>
+                            </div>
+                        </div>
+                        <div id="judgeIncompleteDetails" style="font-size: 0.76rem; color: #fde68a; background: rgba(245, 158, 11, 0.1); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem; font-family: var(--font-mono);"></div>
+                        <p style="font-size: 0.74rem; color: var(--text-muted); margin: 0 0 1rem 0;">
+                            Interrogation cannot proceed without structural facts. If the claimant recovers this information, submit a correction in the History Ledger below or reset the session.
+                        </p>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button type="button" class="btn-secondary btn-judge-correct-latest" style="padding: 0.35rem 0.8rem; font-size: 0.76rem;">
+                                ✏️ Correct Answer in Ledger
+                            </button>
+                            <button type="button" class="btn-danger btn-judge-reset-trigger" style="padding: 0.35rem 0.8rem; font-size: 0.76rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">
+                                🔄 Reset Session
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Hypotheses & Inferences Card -->
+                    <div class="glass-card" style="margin-bottom: 1.25rem;">
+                        <h4 style="font-size: 0.82rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">Soft Hypotheses &amp; Inferences</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.65rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                    <strong style="font-size: 0.75rem; color: #c084fc;">P1: D Run Constancy</strong>
+                                    <span class="badge" id="badgeP1Status" style="font-size: 0.65rem;">PENDING</span>
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin: 0;">D constant across equal A runs. Units 2, 5, 7, 10 inferred.</p>
+                            </div>
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.65rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                    <strong style="font-size: 0.75rem; color: #c084fc;">P2: Run Length Equality</strong>
+                                    <span class="badge" id="badgeP2Status" style="font-size: 0.65rem;">UNTESTED</span>
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin: 0;">D equals the length of the A-run.</p>
+                            </div>
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.65rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                    <strong style="font-size: 0.75rem; color: #c084fc;">P3: B Permutation 1..13</strong>
+                                    <span class="badge" id="badgeP3Status" style="font-size: 0.65rem;">PENDING</span>
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin: 0;">B represents a unique permutation of integers 1-13.</p>
+                            </div>
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.65rem 0.8rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                    <strong style="font-size: 0.75rem; color: #c084fc;">P4: A &amp; D Parity Match</strong>
+                                    <span class="badge" id="badgeP4Status" style="font-size: 0.65rem;">UNTESTED</span>
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin: 0;">LSB of A correlates with LSB of D.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible History Ledger Accordion -->
+                    <div class="glass-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <h4 style="font-size: 0.85rem; color: var(--text-primary); margin: 0;">Interrogation History Ledger</h4>
+                                <span class="badge badge-v1" id="judgeHistoryCountBadge">0 entries</span>
+                            </div>
+                            <span style="font-size: 0.72rem; color: var(--text-muted);">Append-only auditable ledger</span>
+                        </div>
+                        <div class="judge-history-list" id="judgeHistoryList">
+                            <div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.78rem;">
+                                No answers recorded yet. The interrogation ledger will appear here as questions are completed.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN: Progressive Reconstructed Candidate & Provenance Breakdown -->
+                <div>
+                    <!-- Stage A Placeholder (Visible only before total length Q0.1 is established) -->
+                    <div id="judgeStageAPlaceholder" class="judge-stage-a-placeholder">
+                        <div style="font-size: 2.2rem; margin-bottom: 0.75rem; opacity: 0.7;">📐</div>
+                        <h4 style="color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.95rem;">Candidate Bitstream Unallocated</h4>
+                        <p style="font-size: 0.78rem; color: var(--text-muted); max-width: 420px; margin: 0 auto; line-height: 1.5;">
+                            The interrogation has not yet established the structural encoding length. The continuous bitstream grid and provisional population will instantiate once the claimant answers the total bit count in <strong>Q0.1</strong>.
+                        </p>
+                    </div>
+
+                    <!-- Active Progressive Reconstruction Container (Stages B, C, D, E, F, S1-S4) -->
+                    <div id="judgeActiveReconstructionContainer" style="display: none;">
+                        
+                        <!-- Segment Tabs -->
+                        <div id="judgeSegmentTabsContainer" class="judge-segment-tabs" style="display: flex;">
+                            <button type="button" id="btnJudgeSegPart1" class="judge-segment-btn active" onclick="switchJudgeSegment('part1')">Part 1</button>
+                            <button type="button" id="btnJudgeSegPart2" class="judge-segment-btn" onclick="switchJudgeSegment('part2')">Part 2</button>
+                            <button type="button" id="btnJudgeSegEntire" class="judge-segment-btn" onclick="switchJudgeSegment('entire')">Entire Stream</button>
+                        </div>
+
+                        <!-- Unified Reconstruction Workspace Card -->
+                        <div class="glass-card" style="margin-bottom: 1.25rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <div>
+                                    <h4 id="judgeReconStageTitle" style="font-size: 0.88rem; color: var(--primary-light); margin: 0 0 0.2rem 0;">Progressive Bitstream Reconstruction</h4>
+                                    <span id="judgeReconStageDesc" style="font-size: 0.72rem; color: var(--text-muted); display: block; max-width: 380px;">Stream evolves progressively as claimant answers establish authoritative facts.</span>
+                                </div>
+                                <span class="badge badge-v1" id="judgeReconstructionBadge">0 bits fixed (GREEN)</span>
+                            </div>
+
+                            <!-- Fill & Border Semantics Legend -->
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 0.75rem;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.68rem; margin-bottom: 0.35rem; color: var(--text-secondary);">
+                                    <strong style="color: var(--text-muted); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.05em;">Cell Fill Semantics</strong>
+                                    <span style="font-size: 0.64rem; color: var(--text-muted);">(Colors denote position fixing, not 0 vs 1)</span>
+                                </div>
+                                <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; font-size: 0.68rem; margin-bottom: 0.5rem;">
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        <div class="judge-bit-cell cell-fill-green" style="width: 14px; height: 16px; font-size: 0.65rem;">1</div>
+                                        <span style="color: #34d399;">Fixed Position</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        <div class="judge-bit-cell cell-fill-red" style="width: 14px; height: 16px; font-size: 0.65rem;">?</div>
+                                        <span style="color: #fca5a5;">Unfixed Position</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        <div class="judge-bit-cell cell-fill-inferred" style="width: 14px; height: 16px; font-size: 0.65rem;">*</div>
+                                        <span style="color: #fde68a;">Inferred (Provisional)</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        <div class="judge-bit-cell cell-fill-neutral" style="width: 14px; height: 16px; font-size: 0.65rem;">?</div>
+                                        <span style="color: #94a3b8;">Unknown Slot</span>
+                                    </div>
+                                </div>
+                                <div style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.35rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; font-size: 0.68rem;">
+                                    <strong style="color: var(--text-muted); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.05em;">Border Provenance:</strong>
+                                    <span style="color: #38bdf8; display: inline-flex; align-items: center; gap: 3px;"><span style="display: inline-block; width: 10px; height: 2px; background: #06b6d4;"></span> Observed (Claimant)</span>
+                                    <span style="color: #60a5fa; display: inline-flex; align-items: center; gap: 3px;"><span style="display: inline-block; width: 10px; height: 2px; background: #3b82f6;"></span> Derived (Hard Constraint)</span>
+                                    <span style="color: #fbbf24; display: inline-flex; align-items: center; gap: 3px;"><span style="display: inline-block; width: 10px; height: 0px; border-top: 2px dashed #f59e0b;"></span> Inferred (Hypothesis)</span>
+                                </div>
+                            </div>
+
+                            <!-- Continuous Reusable Bitstream Grid -->
+                            <div class="judge-bit-grid" id="judgeBitGrid">
+                                <!-- Populated dynamically based on active stage and segment -->
+                            </div>
+                            <div id="judgeGridSublabels" style="display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--text-muted); margin-top: 0.35rem; font-family: var(--font-mono);">
+                                <span id="judgeGridStartLabel">Bit 0</span>
+                                <span id="judgeGridEndLabel">Bit 142</span>
+                            </div>
+                        </div>
+
+                        <!-- Per-Unit Structural Breakdown Table (Revealed in Stage F) -->
+                        <div class="glass-card" id="judgeUnitAssemblyCard" style="display: none; margin-bottom: 1.25rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <div>
+                                    <h4 style="font-size: 0.85rem; color: var(--text-primary); margin: 0;">Per-Unit Field Assembly</h4>
+                                    <span style="font-size: 0.68rem; color: var(--text-muted);">Sequential unit structural breakdown</span>
+                                </div>
+                                <span id="judgeUnitFieldFormatBadge" style="font-size: 0.7rem; color: #c084fc; font-family: var(--font-mono);"></span>
+                            </div>
+                            <div style="overflow-x: auto;">
+                                <table class="judge-unit-table" id="judgeUnitTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Unit #</th>
+                                            <th>Field A</th>
+                                            <th>Field B</th>
+                                            <th>Field C</th>
+                                            <th>Field D</th>
+                                            <th>Ones Count</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="judgeUnitTableBody">
+                                        <!-- Populated dynamically: 13 rows in Stage F -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Rule 5 Register Allocation Breakdown Table (Revealed in Stage S2) -->
+                        <div class="glass-card" id="judgeRule5AssemblyCard" style="display: none; margin-bottom: 1.25rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <div>
+                                    <h4 style="font-size: 0.85rem; color: #a78bfa; margin: 0;">Rule 5 Register Allocations</h4>
+                                    <span style="font-size: 0.68rem; color: var(--text-muted);">Part 2 Candidate: 2-bit parity codes derived from variable &rarr; register bindings</span>
+                                </div>
+                                <span class="badge badge-v1" id="judgeRule5CountBadge">0 pairs resolved</span>
+                            </div>
+                            <div style="overflow-x: auto; max-height: 340px;">
+                                <table class="judge-rule5-table" id="judgeRule5Table">
+                                    <thead>
+                                        <tr>
+                                            <th>Pair #</th>
+                                            <th>Storage Variable</th>
+                                            <th>Var Parity</th>
+                                            <th>Allocated Register</th>
+                                            <th>Reg Parity</th>
+                                            <th>4-Bit Code</th>
+                                            <th>Bit Range</th>
+                                            <th>Provenance</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="judgeRule5TableBody">
+                                        <!-- Populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Cryptographic Commitment Verification Card (Stage S4) -->
+                        <div class="glass-card" id="judgeCommitmentCard" style="display: none; margin-bottom: 1.25rem; border: 1px solid rgba(139, 92, 246, 0.35);">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 1.1rem;">🔐</span>
+                                        <h4 style="font-size: 0.88rem; color: #c084fc; margin: 0;">Stage S4: Cryptographic Commitment Verification (C_ES)</h4>
+                                    </div>
+                                    <span style="font-size: 0.72rem; color: var(--text-muted);">Pedersen commitment check over reconstructed candidate bitstream</span>
+                                </div>
+                                <span class="badge" id="judgeCommitmentStatusBadge" style="font-size: 0.75rem; padding: 0.35rem 0.75rem;">AWAITING ASSEMBLY</span>
+                            </div>
+
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.75rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 0.75rem;">
+                                <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.75rem;">
+                                    <div style="display: flex; justify-content: space-between; gap: 0.5rem;">
+                                        <span style="color: var(--text-muted);">Target Commitment (C_ES):</span>
+                                        <code id="judgeTargetCes" style="color: #a78bfa; word-break: break-all;">Pending</code>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; gap: 0.5rem;">
+                                        <span style="color: var(--text-muted);">Recalculated Candidate (C_ES'):</span>
+                                        <code id="judgeRecalcCes" style="color: #38bdf8; word-break: break-all;">--</code>
+                                    </div>
+                                    <div style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.4rem; margin-top: 0.2rem;">
+                                        <span id="judgeCommitmentDetail" style="color: var(--text-secondary); line-height: 1.4; display: block;">
+                                            Requires completion of all 251 bits across Stages S1 and S2.
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 0.7rem; color: var(--text-muted); line-height: 1.45; border-left: 2px solid #34d399; padding-left: 0.6rem;">
+                                <strong style="color: #34d399;">Zero-Knowledge Protection:</strong> Blinding factor <code style="color: #34d399;">r_ES</code> is held in confidential private evidence and evaluated server-side. It is never exposed in claimant-facing views or responses.
+                            </div>
+                        </div>
+
+                        <!-- Watermarking Workflow Truthful Pending Card -->
+                        <div class="glass-card" id="judgeWatermarkCard" style="display: none; margin-bottom: 1.25rem; border: 1px dashed rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.03);">
+                            <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem;">
+                                <span style="font-size: 1.6rem; color: #fbbf24;">⚠️</span>
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 0.6rem;">
+                                        <h4 style="font-size: 0.92rem; color: #fbbf24; margin: 0;">Watermark Verification: Protocol Decoupled &amp; Pending</h4>
+                                        <span class="badge badge-warning" style="font-size: 0.65rem;">NOT IMPLEMENTED</span>
+                                    </div>
+                                    <p style="font-size: 0.76rem; color: var(--text-muted); margin: 0.35rem 0 0 0; line-height: 1.5;">
+                                        Under the zero-knowledge dispute architecture, <strong>Design Structural Encoding</strong> (143b / 251b) and <strong>Watermarking</strong> are distinct protocols.
+                                    </p>
+                                </div>
+                            </div>
+                            <div style="background: rgba(5, 10, 20, 0.6); padding: 0.75rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); font-size: 0.74rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.85rem;">
+                                <ul style="margin: 0; padding-left: 1.2rem;">
+                                    <li>Watermark extraction and verification remain strictly <strong>unimplemented</strong> in this interrogation module.</li>
+                                    <li>No dummy verification passes or simulated watermark commitments (<code style="color: #fbbf24;">C_W</code>, <code style="color: #fbbf24;">C_W1</code>) are fabricated.</li>
+                                    <li>Design encoding commitments (<code style="color: #a78bfa;">C_ES</code>, <code style="color: #38bdf8;">C_D</code>) are not reused as watermark commitments.</li>
+                                </ul>
+                            </div>
+                            <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                                <button type="button" class="btn-secondary" disabled style="opacity: 0.5; cursor: not-allowed; font-size: 0.75rem; padding: 0.4rem 0.85rem;">
+                                    Initiate Watermark Dispute Interrogation (Deferred)
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Non-Destructive Correction Modal -->
+            <div id="judgeCorrectionModal" class="modal-backdrop" style="display: none;">
+                <div class="glass-card modal-content" style="max-width: 480px; margin: 10% auto; padding: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 style="margin: 0; color: #c084fc; font-size: 0.95rem;">Submit Non-Destructive Correction</h4>
+                        <button type="button" id="btnCloseCorrectionModal" style="background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">&times;</button>
+                    </div>
+                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;">
+                        <strong style="color: var(--text-primary);" id="corrQuestionIdText">Q0.1</strong>: <span id="corrQuestionPromptText">Prompt</span>
+                    </div>
+                    <div style="background: rgba(5, 10, 20, 0.6); padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.75rem;">
+                        <span style="color: var(--text-muted);">Current effective answer:</span> <strong id="corrCurrentAnswerText" style="color: #f8fafc;">--</strong>
+                    </div>
+                    <div style="margin-bottom: 1.25rem;">
+                        <label style="display: block; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.35rem;">Corrected Answer:</label>
+                        <input type="text" id="corrNewAnswerInput" class="judge-input-field" style="width: 100%; max-width: none;" placeholder="Enter corrected value..." />
+                        <div id="corrQuickChoices" style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('corrNewAnswerInput').value='yes'" style="padding: 0.2rem 0.6rem; font-size: 0.72rem;">Set "yes"</button>
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('corrNewAnswerInput').value='no'" style="padding: 0.2rem 0.6rem; font-size: 0.72rem;">Set "no"</button>
+                            <button type="button" class="btn-secondary" onclick="document.getElementById('corrNewAnswerInput').value='unknown'" style="padding: 0.2rem 0.6rem; font-size: 0.72rem;">Set "unknown"</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+                        <button type="button" id="btnCancelCorrection" class="btn-secondary" style="padding: 0.45rem 1rem; font-size: 0.8rem;">Cancel</button>
+                        <button type="button" id="btnSubmitCorrectionConfirmed" class="judge-btn-submit" style="padding: 0.45rem 1.25rem; font-size: 0.8rem;">Append Correction &rarr;</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div id="heatmapTooltip" class="heatmap-tooltip"></div>

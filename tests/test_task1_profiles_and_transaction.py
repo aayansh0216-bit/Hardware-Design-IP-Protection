@@ -214,12 +214,16 @@ def test_test_e_continue_existing_watermark_workflow():
     assert len(st["watermark_W"]) == 256
     assert st["C_W"] is not None
 
-    # W1 / W2 split
+    # Full watermark embedding (or legacy W1/W2 split)
     assert st["W1"] is not None
     assert len(st["W1"]) > 0
     assert st["C_W1"] is not None
-    assert st["protected_W2"] is not None
-    assert len(st["W1"]) + len(st["protected_W2"]) == 256
+    if st.get("is_full_watermark"):
+        assert len(st["W1"]) == 256
+        assert st["protected_W2"] is None
+    else:
+        assert st["protected_W2"] is not None
+        assert len(st["W1"]) + len(st["protected_W2"]) == 256
 
     # Watermarked RTL embedding
     assert st["watermarked_RTL"] is not None
@@ -576,17 +580,22 @@ def test_seller_private_evidence_reconstruction_and_verification_rules():
     assert "C_W1_evidence" in spi
     cw1_ev = spi["C_W1_evidence"]
     cw1_rm = cw1_ev["reconstruction_method"]
-    assert cw1_rm["w1_bit_length"] == 32
-    assert cw1_rm["w2_bit_length"] == 224
-    assert cw1_rm["canonical_w1"] == st["W1"]
-    assert cw1_rm["canonical_w2"] == st["protected_W2"]
-    assert cw1_rm["canonical_w1"] + cw1_rm["canonical_w2"] == cw_rm["canonical_watermark"]
+    if st.get("is_full_watermark"):
+        assert cw1_rm["w1_bit_length"] == 256
+        assert cw1_rm["w2_bit_length"] == 0
+        assert cw1_rm["canonical_w1"] == st["W1"]
+    else:
+        assert cw1_rm["w1_bit_length"] == 32
+        assert cw1_rm["w2_bit_length"] == 224
+        assert cw1_rm["canonical_w1"] == st["W1"]
+        assert cw1_rm["canonical_w2"] == st["protected_W2"]
+        assert cw1_rm["canonical_w1"] + cw1_rm["canonical_w2"] == cw_rm["canonical_watermark"]
 
-    cw1_cv = cw1_ev["commitment_verification"]
-    assert "C_W1 = s_W1 * G + r_W1 * H" in cw1_cv["commitment_scheme_formula"]
-    assert cw1_cv["opening_factor_r_W1"] == st["blinding_factor_W1"]
-    assert cw1_cv["stored_commitment_C_W1"] == st["C_W1"]
-    assert pe.verify(cw1_rm["canonical_w1"], cw1_cv["stored_commitment_C_W1"], cw1_cv["opening_factor_r_W1"]) == CommitmentVerificationStatus.VALID
+        cw1_cv = cw1_ev["commitment_verification"]
+        assert "C_W1 = s_W1 * G + r_W1 * H" in cw1_cv["commitment_scheme_formula"]
+        assert cw1_cv["opening_factor_r_W1"] == st["blinding_factor_W1"]
+        assert cw1_cv["stored_commitment_C_W1"] == st["C_W1"]
+        assert pe.verify(cw1_rm["canonical_w1"], cw1_cv["stored_commitment_C_W1"], cw1_cv["opening_factor_r_W1"]) == CommitmentVerificationStatus.VALID
 
     # --- C_ES Evidence (Conditional) ---
     assert "C_ES_evidence" in spi

@@ -297,11 +297,11 @@ class ReferenceWatermarkExtractionStage(PipelineStage):
         )
         ctx["reference_extracted_watermark"] = ext_result
 
-        # Reconstruct canonical 256-bit watermark: W_256' = W_embedded' || W_remaining
+        # Verify complete watermark W' against C_W commitment using blinding factor r_w
         pe = PedersenEngine()
         r_w = ctx["watermark_blinding_factor"]
         comm: PedersenCommitment = ctx["watermark_commitment"]
-        remaining_bits = getattr(intended_wm, "remaining_bitstream", "")
+        remaining_bits = getattr(intended_wm, "remaining_bitstream", "") or ""
         reconstructed_wm = (ext_result.bitstream or "") + remaining_bits
 
         v_status = pe.verify(reconstructed_wm, comm.commitment_hex, r_w)
@@ -413,17 +413,24 @@ class ProtectionRecordStage(PipelineStage):
             "protected_rtl_sha256": prot_rtl_sha256,
         }
 
-        # Compute structural design encoding (4 rules from design encoded data.docx)
+        # Compute structural design encoding
         sched_dfg: Optional[ScheduledDFG] = ctx.get("scheduled_dfg")
         structural_enc_dict = None
         if sched_dfg is not None:
             scope = ctx.get("encoding_scope")
+            enc_mode = ctx.get("encoding_mode", "four_rule")
             try:
+                orig_alloc = ctx.get("original_register_allocation")
+                var_to_reg = prot_alloc.variable_to_register if enc_mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1") else None
+                orig_var_to_reg = orig_alloc.variable_to_register if (orig_alloc and enc_mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1")) else None
                 enc_res = DesignStructuralEncoder.encode_scheduled_dfg(
                     sched_dfg,
                     scope_control_steps=scope,
                     allow_sub_as_adder=ctx.get("allow_sub_as_adder", False),
                     use_document_table_quirks=ctx.get("use_document_table_quirks", False),
+                    mode=enc_mode,
+                    var_to_reg=var_to_reg,
+                    original_var_to_reg=orig_var_to_reg,
                 )
                 structural_enc_dict = enc_res.to_dict()
                 ctx["structural_encoding"] = structural_enc_dict

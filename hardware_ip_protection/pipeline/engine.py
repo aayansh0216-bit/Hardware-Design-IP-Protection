@@ -68,14 +68,62 @@ class ProtectionPipeline:
         ]
 
     def run(self, initial_context: Dict[str, Any]) -> Dict[str, Any]:
+        import time
+        from datetime import datetime, timezone
         ctx = dict(initial_context)
+        stage_reports = []
+        pipeline_start = time.perf_counter()
+        pipeline_start_iso = datetime.now(timezone.utc).isoformat()
 
         for stage in self.stages:
             stage_name = stage.stage_id
+            st_start = time.perf_counter()
+            st_start_iso = datetime.now(timezone.utc).isoformat()
             try:
                 ctx = stage.execute(ctx)
+                st_end = time.perf_counter()
+                st_end_iso = datetime.now(timezone.utc).isoformat()
+                elapsed_ms = round((st_end - st_start) * 1000.0, 3)
+                stage_reports.append({
+                    "stage_id": stage_name,
+                    "stage_name": stage_name,
+                    "status": "PASSED",
+                    "start_time": st_start_iso,
+                    "end_time": st_end_iso,
+                    "elapsed_ms": elapsed_ms,
+                    "error": None,
+                })
             except Exception as e:
+                st_end = time.perf_counter()
+                st_end_iso = datetime.now(timezone.utc).isoformat()
+                elapsed_ms = round((st_end - st_start) * 1000.0, 3)
+                stage_reports.append({
+                    "stage_id": stage_name,
+                    "stage_name": stage_name,
+                    "status": "FAILED",
+                    "start_time": st_start_iso,
+                    "end_time": st_end_iso,
+                    "elapsed_ms": elapsed_ms,
+                    "error": str(e),
+                })
+                ctx["pipeline_execution_timing"] = {
+                    "start_time": pipeline_start_iso,
+                    "end_time": st_end_iso,
+                    "total_elapsed_ms": round((st_end - pipeline_start) * 1000.0, 3),
+                    "stage_reports": stage_reports,
+                    "failed_stage": stage_name,
+                    "error": str(e),
+                }
                 raise RuntimeError(f"Error in pipeline stage '{stage_name}': {str(e)}") from e
+
+        pipeline_end = time.perf_counter()
+        pipeline_end_iso = datetime.now(timezone.utc).isoformat()
+        ctx["pipeline_execution_timing"] = {
+            "start_time": pipeline_start_iso,
+            "end_time": pipeline_end_iso,
+            "total_elapsed_ms": round((pipeline_end - pipeline_start) * 1000.0, 3),
+            "stage_reports": stage_reports,
+        }
 
         return ctx
 

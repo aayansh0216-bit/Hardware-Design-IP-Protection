@@ -69,7 +69,38 @@ class ProtectionRepository:
                 )
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_tx_id ON protection_records(transaction_id)")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS verifier_step_hashes (
+                    session_id TEXT NOT NULL,
+                    transaction_id TEXT NOT NULL,
+                    step_id TEXT NOT NULL,
+                    attempt_id INTEGER NOT NULL DEFAULT 1,
+                    canonical_hash TEXT NOT NULL,
+                    hash_algorithm TEXT NOT NULL,
+                    artifact_id TEXT,
+                    recorded_at TEXT NOT NULL,
+                    opening_released INTEGER NOT NULL DEFAULT 0,
+                    opening_released_at TEXT,
+                    PRIMARY KEY (session_id, step_id, attempt_id)
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS seller_securing_reports (
+                    report_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    transaction_id TEXT NOT NULL,
+                    design_id TEXT NOT NULL,
+                    design_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    duration_ms REAL NOT NULL,
+                    report_json TEXT NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rep_tx ON seller_securing_reports(transaction_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rep_run ON seller_securing_reports(run_id)")
             conn.commit()
+
 
     def save(self, record: Any) -> str:
         """
@@ -183,3 +214,154 @@ class ProtectionRepository:
             for row in cursor.fetchall():
                 results.append(dict(row))
         return results
+
+    def record_step_hash(
+        self,
+        session_id: str,
+        transaction_id: str,
+        step_id: str,
+        canonical_hash: str,
+        hash_algorithm: str = "SHA-256",
+        artifact_id: str = "",
+        attempt_id: int = 1,
+    ) -> Dict[str, Any]:
+        """
+        Durably records a calculated canonical hash before opening release.
+        Guarantees that once opening has been released, the hash cannot be replaced.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT canonical_hash, opening_released FROM verifier_step_hashes WHERE session_id = ? AND step_id = ? AND attempt_id = ?",
+                (session_id, step_id, attempt_id)
+            )
+            row = cursor.fetchone()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if row:
+                if row["opening_released"]:
+                    if row["canonical_hash"].lower() != canonical_hash.lower():
+                        raise ValueError(
+                            f"Security violation: Cannot replace recorded hash for step '{step_id}' "
+                            f"after opening information has already been released."
+                        )
+                    return dict(row)
+                cursor.execute(
+                    "UPDATE verifier_step_hashes SET canonical_hash = ?, recorded_at = ? WHERE session_id = ? AND step_id = ? AND attempt_id = ?",
+                    (canonical_hash, now_iso, session_id, step_id, attempt_id)
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO verifier_step_hashes (
+                        session_id, transaction_id, step_id, attempt_id,
+                        canonical_hash, hash_algorithm, artifact_id, recorded_at, opening_released
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    """,
+                    (session_id, transaction_id, step_id, attempt_id, canonical_hash, hash_algorithm, artifact_id, now_iso)
+                )
+            conn.commit()
+        return {
+            "session_id": session_id,
+            "transaction_id": transaction_id,
+            "step_id": step_id,
+            "attempt_id": attempt_id,
+            "canonical_hash": canonical_hash,
+            "hash_algorithm": hash_algorithm,
+            "opening_released": False,
+        }
+
+    def release_step_opening(self, session_id: str, step_id: str, attempt_id: int = 1) -> bool:
+        """
+        Authorizes opening factor release only after canonical hash has been recorded.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT canonical_hash, opening_released FROM verifier_step_hashes WHERE session_id = ? AND step_id = ? AND attempt_id = ?",
+                (session_id, step_id, attempt_id)
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError(
+                    f"Security violation: Opening information for step '{step_id}' "
+                    f"cannot be released before its canonical hash is recorded."
+                )
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cursor.execute(
+                "UPDATE verifier_step_hashes SET opening_released = 1, opening_released_at = ? WHERE session_id = ? AND step_id = ? AND attempt_id = ?",
+                (now_iso, session_id, step_id, attempt_id)
+            )
+            conn.commit()
+            return True
+
+    def get_step_hash_record(self, session_id: str, step_id: str, attempt_id: int = 1) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM verifier_step_hashes WHERE session_id = ? AND step_id = ? AND attempt_id = ?",
+                (session_id, step_id, attempt_id)
+            )
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        return None
+
+    def save_securing_report(self, report_data: Dict[str, Any]) -> str:
+        """
+        Persists a structured seller securing report into SQLite.
+        """
+        report_id = report_data.get("report_id") or f"REP-{report_data.get('run_id', 'UNKNOWN')}"
+        run_id = report_data.get("run_id") or f"RUN-{report_data.get('transaction_id', 'TX-001')}"
+        tx_id = report_data.get("transaction_id") or "TX-001"
+        des_id = report_data.get("design_id") or "iir_butterworth"
+        des_name = report_data.get("design_name") or "IIR Butterworth Filter"
+        status = report_data.get("overall_status") or "SUCCESS"
+        created_at = report_data.get("created_at") or datetime.now(timezone.utc).isoformat()
+        duration_ms = float(report_data.get("total_securing_time_ms", 0.0))
+        report_json = json.dumps(report_data)
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO seller_securing_reports (
+                    report_id, run_id, transaction_id, design_id, design_name,
+                    status, created_at, duration_ms, report_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (report_id, run_id, tx_id, des_id, des_name, status, created_at, duration_ms, report_json)
+            )
+            conn.commit()
+        return report_id
+
+    def get_securing_report(self, report_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT report_json FROM seller_securing_reports WHERE report_id = ?", (report_id,))
+            row = cursor.fetchone()
+            if row:
+                return json.loads(row["report_json"])
+        return None
+
+    def get_latest_securing_report_for_transaction(self, transaction_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT report_json FROM seller_securing_reports WHERE transaction_id = ? ORDER BY created_at DESC LIMIT 1",
+                (transaction_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return json.loads(row["report_json"])
+        return None
+
+    def list_securing_reports_for_transaction(self, transaction_id: str) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT report_id, run_id, transaction_id, design_id, design_name, status, created_at, duration_ms FROM seller_securing_reports WHERE transaction_id = ? ORDER BY created_at DESC",
+                (transaction_id,)
+            )
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+

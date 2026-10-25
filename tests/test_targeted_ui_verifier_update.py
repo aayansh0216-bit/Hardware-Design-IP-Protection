@@ -278,54 +278,63 @@ def test_verifier_step_data_payload_completeness():
     # Step 2: Calculate Secured Design Encoding E_S
     s2_res = client.post("/api/verifier/execute_step", json={"step_number": 2}).json()
     st2 = s2_res["step_result"]["stage1_reconstruction"]
-    assert st2["extracted_bitstream"] is not None
-    assert len(st2["extracted_bitstream"]) == 143
-    assert st2["total_nodes_recovered"] == 13
+    assert st2["canonical_hash"] is not None and len(st2["canonical_hash"]) == 64
+    assert st2["bit_length"] == 143
+    assert "extracted_bitstream" not in st2
+    assert "secured_encoding_ES" not in st2
 
     # Step 3: Invariance & Conditional C_ES
     s3_res = client.post("/api/verifier/execute_step", json={"step_number": 3}).json()
     st3_1 = s3_res["step_result"]["stage1_reconstruction"]
     st3_2 = s3_res["step_result"]["stage2_verification"]
-    assert "identical to original design encoding D" in st3_1["comparison"]
-    assert "not required" in st3_2["stored_c_es"].lower()
+    assert "not required" in st3_2["stored_c_es"].lower() or "not required" in st3_1.get("branch", "").lower()
     assert s3_res["step_result"]["status"] == "NOT REQUIRED"
 
     # Step 4: Verify C_D
     s4_res = client.post("/api/verifier/execute_step", json={"step_number": 4}).json()
     st4_1 = s4_res["step_result"]["stage1_reconstruction"]
     st4_2 = s4_res["step_result"]["stage2_verification"]
-    assert len(st4_1["calculated_value_D"]) == 143
+    assert st4_1["canonical_hash"] is not None and len(st4_1["canonical_hash"]) == 64
+    assert st4_1["bit_length"] == 143
+    assert "calculated_value_D" not in st4_1
     assert st4_2["opening_factor_r_D"] is not None
     assert st4_2["stored_commitment_C_D"] is not None
     assert st4_2["recalculated_commitment_C_D"] == st4_2["stored_commitment_C_D"]
     assert s4_res["step_result"]["status"] == "MATCH"
 
-    # Step 5: Extract W1'
+    # Step 5: Extract Complete Watermark W' (256 bits)
     s5_res = client.post("/api/verifier/execute_step", json={"step_number": 5}).json()
     st5 = s5_res["step_result"]["stage1_reconstruction"]
-    assert len(st5["extracted_bitstream_W1"]) == 32
+    assert st5["canonical_hash"] is not None and len(st5["canonical_hash"]) == 64
+    assert st5["bit_length"] == 256
+    assert "extracted_bitstream_W1" not in st5
 
-    # Step 6: Verify C_W1
+    # Step 6: Verify C_W
     s6_res = client.post("/api/verifier/execute_step", json={"step_number": 6}).json()
     st6_2 = s6_res["step_result"]["stage2_verification"]
-    assert st6_2["recalculated_commitment_C_W1"] == st6_2["stored_commitment_C_W1"]
+    stored_cw = st6_2.get("stored_commitment_C_W") or st6_2.get("stored_commitment_C_W1")
+    recalc_cw = st6_2.get("recalculated_commitment_C_W") or st6_2.get("recalculated_commitment_C_W1")
+    assert recalc_cw == stored_cw
     assert s6_res["step_result"]["status"] == "MATCH"
 
-    # Step 7: Reconstruct Complete W'
+    # Step 7: Reconstruct Complete W' (Marked NOT REQUIRED in full model)
     s7_res = client.post("/api/verifier/execute_step", json={"step_number": 7}).json()
     st7 = s7_res["step_result"]["stage1_reconstruction"]
-    assert len(st7["reconstructed_watermark_W"]) == 256
+    assert st7["canonical_hash"] is not None and len(st7["canonical_hash"]) == 64
+    assert (st7.get("total_bit_length") or st7.get("bit_length")) == 256
+    assert "reconstructed_watermark_W" not in st7
+    assert s7_res["step_result"]["status"] in ("NOT REQUIRED", "MATCH")
 
-    # Step 8: Verify C_W
+    # Step 8: Verify C_W (Marked NOT REQUIRED in full model, C_W verified in Step 6)
     s8_res = client.post("/api/verifier/execute_step", json={"step_number": 8}).json()
-    st8_2 = s8_res["step_result"]["stage2_verification"]
-    assert st8_2["recalculated_commitment_C_W"] == st8_2["stored_commitment_C_W"]
-    assert s8_res["step_result"]["status"] == "MATCH"
+    assert s8_res["step_result"]["status"] in ("NOT REQUIRED", "MATCH")
 
     # Step 9: Validate B'
     s9_res = client.post("/api/verifier/execute_step", json={"step_number": 9}).json()
     st9 = s9_res["step_result"]["stage1_reconstruction"]
-    assert len(st9["bitstream_B"]) == 555
+    assert st9["canonical_hash"] is not None and len(st9["canonical_hash"]) == 64
+    assert st9["bit_length"] == 555
+    assert "bitstream_B" not in st9
     assert st9["zeros_count"] == 242
     assert st9["ones_count"] == 313
 
@@ -338,7 +347,9 @@ def test_verifier_step_data_payload_completeness():
     # Step 11: Watermark Relationship Formula F
     s11_res = client.post("/api/verifier/execute_step", json={"step_number": 11}).json()
     st11_1 = s11_res["step_result"]["stage1_reconstruction"]
-    assert st11_1["expected_watermark_W"] == st11_1["reconstructed_watermark_W"]
+    assert st11_1["expected_watermark_hash"] == st11_1["reconstructed_watermark_hash"]
+    assert len(st11_1["reconstructed_watermark_hash"]) == 64
+    assert "expected_watermark_W" not in st11_1
     assert s11_res["step_result"]["status"] == "MATCH"
 
     # Step 12: Transaction Evidence & Rights

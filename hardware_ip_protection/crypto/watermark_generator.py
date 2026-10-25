@@ -167,12 +167,13 @@ class SymmetricHKDFWatermarkGenerator(TransactionWatermarkGenerator):
         self,
         transaction_record: Dict[str, Any],
         transaction_credentials: Dict[str, Any],
-        watermark_length: Optional[int] = 16,
+        watermark_length: Optional[Any] = CANONICAL_WATERMARK_LENGTH,
         D: Optional[str] = None,
         B: Optional[str] = None,
     ) -> TransactionWatermark:
-        if watermark_length is not None and watermark_length < 1:
-            raise ValueError(f"Watermark length must be >= 1, got {watermark_length}")
+        if watermark_length is not None:
+            if isinstance(watermark_length, int) and watermark_length < 1:
+                raise ValueError(f"Watermark length must be >= 1, got {watermark_length}")
 
         canonical_tx_str = self.canonicalize_transaction_record(transaction_record, D=D, B=B)
 
@@ -198,9 +199,12 @@ class SymmetricHKDFWatermarkGenerator(TransactionWatermarkGenerator):
         canonical_bitstream = "".join(f"{byte:08b}" for byte in derived_bytes)
         assert len(canonical_bitstream) == CANONICAL_WATERMARK_LENGTH
 
-        # Partition into embedded (N) and remaining (256 - N)
-        target_embedded_length = watermark_length if watermark_length is not None else CANONICAL_WATERMARK_LENGTH
-        target_embedded_length = min(target_embedded_length, CANONICAL_WATERMARK_LENGTH)
+        # Default to the complete 256-bit watermark without intentional splitting
+        if watermark_length is None or watermark_length == "auto" or str(watermark_length).lower() == "automatic":
+            target_embedded_length = CANONICAL_WATERMARK_LENGTH
+        else:
+            target_embedded_length = min(int(watermark_length), CANONICAL_WATERMARK_LENGTH)
+
         embedded_bitstream = canonical_bitstream[:target_embedded_length]
 
         return TransactionWatermark(
@@ -208,3 +212,4 @@ class SymmetricHKDFWatermarkGenerator(TransactionWatermarkGenerator):
             canonical_bitstream=canonical_bitstream,
             embedded_length=target_embedded_length,
         )
+

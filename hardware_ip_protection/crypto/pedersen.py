@@ -228,3 +228,79 @@ class PedersenEngine:
                 return CommitmentVerificationStatus.INVALID
         except Exception:
             return CommitmentVerificationStatus.INVALID
+
+    def scalar_from_digest(self, digest_hex: str) -> int:
+        """
+        Converts a canonical hexadecimal hash digest directly into a curve scalar,
+        matching hash_to_scalar exactly without double-hashing.
+        """
+        clean_hex = digest_hex.strip().lower()
+        if clean_hex.startswith("0x"):
+            clean_hex = clean_hex[2:]
+        b = bytes.fromhex(clean_hex)
+        scalar = int.from_bytes(b, "big") % self.order
+        return scalar if scalar != 0 else 1
+
+    def commit_from_digest(
+        self, digest_hex: str, blinding_factor: Optional[int] = None
+    ) -> Tuple[PedersenCommitment, int]:
+        """
+        Computes commitment C = s * G + r * H using scalar derived directly from canonical digest.
+        """
+        if blinding_factor is None:
+            blinding_factor = self.generate_blinding_factor()
+
+        s = self.scalar_from_digest(digest_hex)
+        r = blinding_factor % self.order
+
+        point_C = (s * self.G) + (r * self.H)
+        c_hex = self.point_to_hex(point_C)
+
+        commitment = PedersenCommitment(
+            commitment_hex=c_hex,
+            curve_name="NIST256p",
+            blinding_factor_hex=hex(blinding_factor)[2:].zfill(64),
+            message_hash=digest_hex.strip().lower(),
+        )
+        return commitment, blinding_factor
+
+    def verify_from_digest(
+        self,
+        digest_hex: Optional[str],
+        commitment_hex: str,
+        blinding_factor: Optional[int | str],
+    ) -> CommitmentVerificationStatus:
+        """
+        Verifies exact equality C' == C using scalar derived directly from canonical digest.
+        Prevents double-hashing while reusing existing curve points and group arithmetic.
+        """
+        if digest_hex is None or blinding_factor is None or not commitment_hex:
+            return CommitmentVerificationStatus.NOT_VERIFIABLE
+
+        try:
+            self.hex_to_point(commitment_hex)
+
+            if isinstance(blinding_factor, str):
+                blinding_factor_str = blinding_factor.strip()
+                if not blinding_factor_str:
+                    return CommitmentVerificationStatus.NOT_VERIFIABLE
+                r = int(blinding_factor_str, 16)
+            else:
+                r = int(blinding_factor)
+
+            if r < 0:
+                return CommitmentVerificationStatus.INVALID
+
+            s = self.scalar_from_digest(digest_hex)
+            r = r % self.order
+
+            recomputed_point = (s * self.G) + (r * self.H)
+            recomputed_hex = self.point_to_hex(recomputed_point)
+
+            if recomputed_hex.lower() == commitment_hex.strip().lower():
+                return CommitmentVerificationStatus.VALID
+            else:
+                return CommitmentVerificationStatus.INVALID
+        except Exception:
+            return CommitmentVerificationStatus.INVALID
+

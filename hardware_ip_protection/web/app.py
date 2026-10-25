@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 import os
 import re
 
@@ -485,6 +485,8 @@ class SelectDesignRequest(BaseModel):
 
 class EncodeDesignRequest(BaseModel):
     use_table_quirks: bool = False
+    design_id: Optional[str] = None
+    rule_id: Optional[str] = None
 
 
 class ContinueWatermarkRequest(BaseModel):
@@ -497,10 +499,11 @@ class ContinueWatermarkRequest(BaseModel):
 
 
 @app.get("/api/transaction/state")
-def get_transaction_state():
+def get_transaction_state(role: Optional[str] = "seller"):
     mgr = TransactionManager.get_instance()
+    role_clean = role or "seller"
     return {
-        "state": mgr.get_state().model_dump(),
+        "state": mgr.get_state_for_role(role=role_clean),
         "designs": AVAILABLE_DESIGNS,
         "rules": AVAILABLE_ENCODING_RULES,
     }
@@ -511,7 +514,15 @@ def select_design_endpoint(req: SelectDesignRequest):
     mgr = TransactionManager.get_instance()
     try:
         st = mgr.select_design_and_rule(req.design_id, req.rule_id)
-        return {"state": st.model_dump()}
+        return {
+            "state": st.model_dump(),
+            "design_id": st.design_id,
+            "encoding_rule_id": st.encoding_rule_id,
+            "selected_design": st.selected_design,
+            "selected_encoding_rule": st.selected_encoding_rule,
+            "rule_version": st.encoding_rule_version,
+            "encoding_transform_required": st.encoding_transform_required,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -521,6 +532,9 @@ def encode_design_endpoint(req: Optional[EncodeDesignRequest] = None):
     mgr = TransactionManager.get_instance()
     use_quirks = req.use_table_quirks if req else False
     try:
+        if req and req.rule_id:
+            des_id = req.design_id or mgr.get_state().design_id
+            mgr.select_design_and_rule(des_id, req.rule_id)
         st = mgr.generate_original_encoding(use_table_quirks=use_quirks)
         return {"state": st.model_dump()}
     except Exception as e:
@@ -571,13 +585,14 @@ def reject_buyer_endpoint():
 def generate_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
     mgr = TransactionManager.get_instance()
     p = req or ContinueWatermarkRequest()
+    cur_st = mgr.get_state()
     try:
         st = mgr.generate_transaction_watermark(
-            transaction_id=p.transaction_id or "TX-001",
-            seller_id=p.seller_id or "SELLER-001",
-            buyer_id=p.buyer_id or "BUYER-001",
-            license_type=p.license_type or "exclusive",
-            k_tx=p.k_tx or "K_tx_symmetric_credential_secret_777",
+            transaction_id=p.transaction_id or cur_st.transaction_id or "TX-001",
+            seller_id=p.seller_id or cur_st.seller_id or "SELLER-001",
+            buyer_id=p.buyer_id or cur_st.buyer_id or "BUYER-001",
+            license_type=p.license_type or cur_st.license_type or "exclusive",
+            k_tx=p.k_tx or cur_st.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777"),
             watermark_length=p.watermark_length or "auto",
         )
         return {"state": st.model_dump()}
@@ -624,12 +639,14 @@ def embed_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
             watermark_length=p.watermark_length or "auto",
         )
         if st.protection_id and st.pipeline_result:
-            active_sessions[st.protection_id] = {
+            if st.protection_id not in active_sessions:
+                active_sessions[st.protection_id] = {}
+            active_sessions[st.protection_id].update({
                 "protected_verilog": st.watermarked_RTL,
                 "original_verilog": st.original_RTL,
                 "benchmark_id": st.design_id,
                 "structural_encoding": st.secured_encoding_E_S,
-            }
+            })
         return {"state": st.model_dump()}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -669,22 +686,25 @@ def verify_behavioral_endpoint():
 def continue_watermark_endpoint(req: Optional[ContinueWatermarkRequest] = None):
     mgr = TransactionManager.get_instance()
     p = req or ContinueWatermarkRequest()
+    cur_st = mgr.get_state()
     try:
         st = mgr.continue_watermark_workflow(
-            transaction_id=p.transaction_id or "TX-001",
-            seller_id=p.seller_id or "SELLER-001",
-            buyer_id=p.buyer_id or "BUYER-001",
-            license_type=p.license_type or "exclusive",
-            k_tx=p.k_tx or "K_tx_symmetric_credential_secret_777",
+            transaction_id=p.transaction_id or cur_st.transaction_id or "TX-001",
+            seller_id=p.seller_id or cur_st.seller_id or "SELLER-001",
+            buyer_id=p.buyer_id or cur_st.buyer_id or "BUYER-001",
+            license_type=p.license_type or cur_st.license_type or "exclusive",
+            k_tx=p.k_tx or cur_st.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777"),
             watermark_length=p.watermark_length or "auto",
         )
         if st.protection_id and st.pipeline_result:
-            active_sessions[st.protection_id] = {
+            if st.protection_id not in active_sessions:
+                active_sessions[st.protection_id] = {}
+            active_sessions[st.protection_id].update({
                 "protected_verilog": st.watermarked_RTL,
                 "original_verilog": st.original_RTL,
                 "benchmark_id": st.design_id,
                 "structural_encoding": st.secured_encoding_E_S,
-            }
+            })
         return {"state": st.model_dump()}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -695,6 +715,34 @@ def reset_transaction_endpoint():
     mgr = TransactionManager.get_instance()
     st = mgr.reset()
     return {"state": st.model_dump()}
+
+
+@app.get("/api/transaction/report")
+def get_securing_report_endpoint(transaction_id: Optional[str] = None):
+    """
+    Read-only retrieval of the technical cost and overhead report for the active transaction.
+    Does NOT rerun watermarking or alter pipeline state.
+    """
+    mgr = TransactionManager.get_instance()
+    report = mgr.get_securing_report()
+    return {"report": report, "status": report.get("overall_status", "NO_RUN_YET")}
+
+
+@app.get("/api/transaction/report/export")
+def export_securing_report_endpoint(transaction_id: Optional[str] = None):
+    """
+    Export the technical securing report as a downloadable JSON document.
+    """
+    from fastapi.responses import Response
+    mgr = TransactionManager.get_instance()
+    report = mgr.get_securing_report()
+    tx_id = report.get("transaction_id", "TX-001")
+    json_bytes = json.dumps(report, indent=2).encode("utf-8")
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=securing_report_{tx_id}.json"},
+    )
 
 
 # ==============================================================================
@@ -711,8 +759,18 @@ class ConfigureDisputeRequest(BaseModel):
 
 
 class ExecuteVerifierStepRequest(BaseModel):
-    step_number: int
+    step_number: Union[int, str]
     overrides: Optional[Dict[str, Any]] = None
+
+
+class RecordStepHashRequest(BaseModel):
+    step_id: str
+    canonical_hash: str
+    artifact_id: Optional[str] = ""
+
+
+class ReleaseStepOpeningRequest(BaseModel):
+    step_id: str
 
 
 class RunAllStepsRequest(BaseModel):
@@ -754,14 +812,41 @@ def configure_dispute_endpoint(req: ConfigureDisputeRequest):
     return {"session": sess.model_dump()}
 
 
+@app.post("/api/verifier/record_step_hash")
+def record_step_hash_endpoint(req: RecordStepHashRequest):
+    v_eng = VerifierEngine.get_instance()
+    try:
+        res = v_eng.record_step_hash(step_id=req.step_id, hash_hex=req.canonical_hash, artifact_id=req.artifact_id or "")
+        return {"status": "RECORDED", "record": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/verifier/release_opening")
+def release_opening_endpoint(req: ReleaseStepOpeningRequest):
+    v_eng = VerifierEngine.get_instance()
+    try:
+        res = v_eng.release_step_opening(step_id=req.step_id)
+        return {"status": "RELEASED", "record": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/verifier/execute_step")
 def execute_verifier_step_endpoint(req: ExecuteVerifierStepRequest):
     v_eng = VerifierEngine.get_instance()
     try:
         res = v_eng.execute_step(req.step_number, req.overrides)
+        c_hash = res.canonical_hash or res.stage1_reconstruction.get("canonical_hash")
+        h_algo = res.hash_algorithm or res.stage1_reconstruction.get("hash_algorithm", "SHA-256")
+        b_len = res.bit_length or res.stage1_reconstruction.get("bit_length")
         return {
             "step_result": res.model_dump(),
             "session": v_eng.get_session().model_dump(),
+            "canonical_hash": c_hash,
+            "hash": c_hash,
+            "hash_algorithm": h_algo,
+            "bit_length": b_len,
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -809,9 +894,110 @@ def audit_ref_sus_endpoint(req: AuditRefSusRequest):
 
 
 
+# =====================================================================
+# JUDGE-LED INTERROGATION ENDPOINTS (143-Bit / 251-Bit Secured Stage)
+# =====================================================================
+from hardware_ip_protection.pipeline.interrogation_manager import InterrogationManager
+
+class StartJudgeSessionRequest(BaseModel):
+    transaction_id: Optional[str] = None
+    claimant_id: Optional[str] = "BUYER-001"
+    workflow: Optional[str] = "unsecured_design_encoding"
+    branch: Optional[str] = "E_U"
+    block5b_enabled: Optional[bool] = False
+
+class SubmitJudgeAnswerRequest(BaseModel):
+    session_id: str
+    question_id: str
+    answer: Any
+
+class SubmitJudgeCorrectionRequest(BaseModel):
+    session_id: str
+    question_id: str
+    answer: Any
+
+class ResetJudgeSessionRequest(BaseModel):
+    session_id: str
+
+class ToggleBlock5bRequest(BaseModel):
+    session_id: str
+    enabled: bool
+
+@app.get("/api/judge/session")
+def get_judge_session_endpoint(
+    session_id: Optional[str] = None,
+    transaction_id: Optional[str] = None,
+    workflow: Optional[str] = None,
+):
+    im = InterrogationManager.get_instance()
+    tx_id = transaction_id or "TX-001"
+    target_wf = workflow or "unsecured_design_encoding"
+    if session_id:
+        sess = im.get_session(session_id=session_id)
+    else:
+        sess = im.get_session(transaction_id=tx_id, workflow=target_wf)
+
+    if not sess:
+        sess = im.start_session(transaction_id=tx_id, workflow=target_wf)
+    return im.get_session_view(sess.session_id)
+
+@app.post("/api/judge/session/start")
+def start_judge_session_endpoint(req: StartJudgeSessionRequest):
+    im = InterrogationManager.get_instance()
+    tx_id = req.transaction_id or "TX-001"
+    target_wf = req.workflow or "unsecured_design_encoding"
+    sess = im.start_session(
+        transaction_id=tx_id,
+        claimant_id=req.claimant_id or "BUYER-001",
+        workflow=target_wf,
+        branch=req.branch or "E_U",
+        block5b_enabled=bool(req.block5b_enabled),
+    )
+    return im.get_session_view(sess.session_id)
+
+@app.post("/api/judge/session/answer")
+def submit_judge_answer_endpoint(req: SubmitJudgeAnswerRequest):
+    im = InterrogationManager.get_instance()
+    try:
+        view = im.submit_answer(req.session_id, req.question_id, req.answer)
+        return view
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/judge/session/correct")
+def submit_judge_correction_endpoint(req: SubmitJudgeCorrectionRequest):
+    im = InterrogationManager.get_instance()
+    try:
+        view = im.submit_correction(req.session_id, req.question_id, req.answer)
+        return view
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/judge/session/reset")
+def reset_judge_session_endpoint(req: ResetJudgeSessionRequest):
+    im = InterrogationManager.get_instance()
+    sess = im.reset_session(req.session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return im.get_session_view(sess.session_id)
+
+@app.post("/api/judge/session/toggle_block5b")
+def toggle_block5b_endpoint(req: ToggleBlock5bRequest):
+    im = InterrogationManager.get_instance()
+    sess = im.toggle_block5b(req.session_id, req.enabled)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return im.get_session_view(sess.session_id)
+
+
 # Static files mount
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if not os.path.exists(static_dir):
     os.makedirs(static_dir, exist_ok=True)
 
 app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+

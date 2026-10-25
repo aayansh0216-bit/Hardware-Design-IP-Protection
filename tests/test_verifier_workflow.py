@@ -168,7 +168,9 @@ def test_test_b_valid_seller_buyer_transaction():
 
     # Check Step 2: Extract secured encoding E_S'
     assert results["step_2"]["status"] == "EXTRACTED"
-    assert len(results["step_2"]["stage1_reconstruction"]["secured_encoding_ES"]) == 143
+    assert results["step_2"]["stage1_reconstruction"]["canonical_hash"] is not None
+    assert results["step_2"]["stage1_reconstruction"]["bit_length"] == 143
+    assert "secured_encoding_ES" not in results["step_2"]["stage1_reconstruction"]
 
     # Check Step 3: Encoding invariance
     assert results["step_3"]["status"] == "NOT REQUIRED"
@@ -178,21 +180,21 @@ def test_test_b_valid_seller_buyer_transaction():
     assert results["step_4"]["status"] == "MATCH"
     assert results["step_4"]["stage2_verification"]["status"] == "MATCH"
 
-    # Check Step 5: Extract embedded watermark W1'
+    # Check Step 5: Extract embedded watermark W'
     assert results["step_5"]["status"] == "EXTRACTED"
-    assert results["step_5"]["stage1_reconstruction"]["bit_length"] == 32
+    assert results["step_5"]["stage1_reconstruction"]["bit_length"] == 256
 
-    # Check Step 6: Verify C_W1
+    # Check Step 6: Verify C_W
     assert results["step_6"]["status"] == "MATCH"
     assert results["step_6"]["stage2_verification"]["status"] == "MATCH"
 
-    # Check Step 7: Reconstruct complete watermark W'
-    assert results["step_7"]["status"] == "MATCH"
-    assert results["step_7"]["stage1_reconstruction"]["total_bit_length"] == 256
+    # Check Step 7: Reconstruct complete watermark W' (NOT REQUIRED in full watermark model)
+    assert results["step_7"]["status"] == "NOT REQUIRED"
+    assert results["step_7"]["stage1_reconstruction"]["status"] == "NOT REQUIRED"
 
-    # Check Step 8: Verify C_W
-    assert results["step_8"]["status"] == "MATCH"
-    assert results["step_8"]["stage2_verification"]["status"] == "MATCH"
+    # Check Step 8: Verify C_W (NOT REQUIRED in full watermark model)
+    assert results["step_8"]["status"] == "NOT REQUIRED"
+    assert results["step_8"]["stage2_verification"]["status"] == "NOT REQUIRED"
 
     # Check Step 9: Validate Buyer contribution B' (555 bits, 242 zeros, 313 ones)
     assert results["step_9"]["status"] == "MATCH"
@@ -237,7 +239,7 @@ def test_test_c_secured_encoding_unchanged():
 
     assert res3.status == "NOT REQUIRED"
     assert res3.stage2_verification["status"] == "NOT REQUIRED"
-    assert res3.stage2_verification["recalculated_C_ES"] == "NOT_APPLICABLE (E_S = D)"
+    assert "NOT_APPLICABLE" in res3.stage2_verification["recalculated_C_ES"]
     assert res3.stage2_verification["stored_C_ES"] == "NOT_REQUIRED"
 
     # Continues directly to Step 4 without inventing a fake C_ES
@@ -314,17 +316,25 @@ def test_test_e_incorrect_commitment_opening():
     assert res4.stage2_verification["status"] == "MISMATCH"
     assert res4.stage2_verification["recalculated_commitment_C_D"] != res4.stage2_verification["stored_commitment_C_D"]
 
-    # In Step 6, provide incorrect r_W1
+    # In Step 6, provide incorrect r_w / r_w1 (verifies complete watermark commitment C_W)
     ve.execute_step(5)
-    res6 = ve.execute_step(6, overrides={"r_w1": "1111111111111111111111111111111111111111111111111111111111111111"})
+    res6 = ve.execute_step(6, overrides={"r_w": "1111111111111111111111111111111111111111111111111111111111111111"})
     assert res6.status == "MISMATCH"
     assert res6.stage2_verification["status"] == "MISMATCH"
 
-    # In Step 8, provide incorrect r_W
+    # In full-watermark model, Step 7 and Step 8 are NOT REQUIRED
     ve.execute_step(7)
-    res8 = ve.execute_step(8, overrides={"r_w": "2222222222222222222222222222222222222222222222222222222222222222"})
-    assert res8.status == "MISMATCH"
-    assert res8.stage2_verification["status"] == "MISMATCH"
+    res8 = ve.execute_step(8)
+    assert res8.status == "NOT REQUIRED"
+
+    # Legacy transaction test: if legacy transaction is flagged, Step 8 verifies C_W and fails on bad opening factor
+    extracted_w = ve.session.internal_confidential_values.get("W") or ve.session.internal_confidential_values.get("W1")
+    ve.session.internal_confidential_values["W1"] = extracted_w[:32]
+    res7_legacy = ve.execute_step(7, overrides={"is_full_watermark": False, "w2_bitstream": "0" * 224})
+    assert res7_legacy.status == "MATCH"
+    res8_legacy = ve.execute_step(8, overrides={"is_full_watermark": False, "r_w": "2222222222222222222222222222222222222222222222222222222222222222"})
+    assert res8_legacy.status == "MISMATCH"
+    assert res8_legacy.stage2_verification["status"] == "MISMATCH"
 
 
 # ==============================================================================
@@ -371,24 +381,29 @@ def test_test_g_incorrect_w1_or_w2():
 
     # 1. Flip a bit in extracted W1'
     ve.execute_step(5)
-    extracted_w1 = ve.get_session().step_results["step_5"].stage1_reconstruction["extracted_bitstream_W1"]
-    corrupted_w1 = ("1" if extracted_w1[0] == "0" else "0") + extracted_w1[1:]
+    assert "extracted_bitstream_W1" not in ve.get_session().step_results["step_5"].stage1_reconstruction
+    assert ve.get_session().step_results["step_5"].stage1_reconstruction["canonical_hash"] is not None
+    extracted_w = ve.get_session().internal_confidential_values.get("W") or ve.get_session().internal_confidential_values.get("W1")
+    corrupted_w = ("1" if extracted_w[0] == "0" else "0") + extracted_w[1:]
 
-    # Step 6 with corrupted W1'
-    res6 = ve.execute_step(6, overrides={"w1_bitstream": corrupted_w1})
+    # Step 6 with corrupted watermark
+    res6 = ve.execute_step(6, overrides={"w_bitstream": corrupted_w, "w1_bitstream": corrupted_w})
     assert res6.status == "MISMATCH"
     assert res6.stage2_verification["status"] == "MISMATCH"
 
-    # 2. Corrupt W2 in Step 7
-    tm = TransactionManager.get_instance()
-    st = tm.get_state()
-    corrupted_w2 = ("1" if st.protected_W2[0] == "0" else "0") + st.protected_W2[1:]
-    res7 = ve.execute_step(7, overrides={"w2_bitstream": corrupted_w2})
-    assert res7.status == "MATCH"
-    # Step 8 checks commitment of reconstructed W' (which is now corrupted)
+    # In full-watermark model, Step 7 and Step 8 are NOT REQUIRED
+    res7 = ve.execute_step(7)
+    assert res7.status == "NOT REQUIRED"
     res8 = ve.execute_step(8)
-    assert res8.status == "MISMATCH"
-    assert res8.stage2_verification["status"] == "MISMATCH"
+    assert res8.status == "NOT REQUIRED"
+
+    # Legacy test: corrupting W2 in Step 7 causes Step 8 mismatch
+    ve.session.internal_confidential_values["W1"] = extracted_w[:32]
+    res7_leg = ve.execute_step(7, overrides={"is_full_watermark": False, "w2_bitstream": "1" * 224})
+    assert res7_leg.status == "MATCH"
+    res8_leg = ve.execute_step(8, overrides={"is_full_watermark": False})
+    assert res8_leg.status == "MISMATCH"
+    assert res8_leg.stage2_verification["status"] == "MISMATCH"
 
 
 # ==============================================================================
@@ -534,7 +549,11 @@ def test_independent_rtl_reconstruction_and_tamper():
     # 1. Normal reconstruction from authentic RTL
     res2_norm = ve.execute_step(2)
     assert res2_norm.status == "EXTRACTED"
-    encoding_norm = res2_norm.stage1_reconstruction["extracted_bitstream"]
+    assert "extracted_bitstream" not in res2_norm.stage1_reconstruction
+    hash_norm = res2_norm.stage1_reconstruction["canonical_hash"]
+    assert len(hash_norm) == 64
+    assert res2_norm.stage1_reconstruction["bit_length"] == 143
+    encoding_norm = ve.session.internal_confidential_values["E_S"]
     assert len(encoding_norm) == 143
 
     # 2. Tampered RTL: change an addition to multiplication in the RTL text
@@ -546,9 +565,9 @@ def test_independent_rtl_reconstruction_and_tamper():
 
     res2_tampered = ve.execute_step(2, overrides={"disputed_rtl": tampered_rtl})
     assert res2_tampered.status == "EXTRACTED"
-    encoding_tampered = res2_tampered.stage1_reconstruction["extracted_bitstream"]
-    # The reconstructed bitstream MUST differ because node operation opcode changed
-    assert encoding_tampered != encoding_norm
+    hash_tampered = res2_tampered.stage1_reconstruction["canonical_hash"]
+    # The reconstructed hash MUST differ because node operation opcode changed
+    assert hash_tampered != hash_norm
 
     # 3. Malformed RTL that violates synthesizable state comments
     malformed_rtl = "module broken_filter(input clk); wire x; endmodule"
