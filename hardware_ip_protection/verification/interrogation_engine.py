@@ -1684,6 +1684,7 @@ class InterrogationEngine:
                     a_values[rep_u] = rep_a_answers[r_idx]
                     set_fact(f"unit_{rep_u}_A", rep_a_answers[r_idx], FactStatus.OBSERVED, f"Q4.{r_idx}")
 
+            weighted_a_popcount = None
             if len(rep_a_answers) == len(runs):
                 # Propagate A to all units in runs
                 weighted_a_popcount = 0
@@ -1698,7 +1699,7 @@ class InterrogationEngine:
 
             # Validate weighted popcount against field A total ones
             tot_a_val = facts.get("field_a_total_ones", {}).get("val")
-            if tot_a_val is not None:
+            if tot_a_val is not None and weighted_a_popcount is not None:
                 if weighted_a_popcount != tot_a_val:
                     contradictions.append(f"H5: Weighted popcount of field A ({weighted_a_popcount}) does not equal field A total ones ({tot_a_val}).")
 

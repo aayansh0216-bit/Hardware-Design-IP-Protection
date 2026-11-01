@@ -111,6 +111,11 @@ class TransactionState(BaseModel):
     C_B: Optional[str] = None
     blinding_factor_B: Optional[str] = None
 
+    # Shared Transaction Factor T (256-bit binary bitstream)
+    transaction_factor_T: Optional[str] = None
+    transaction_factor_hex: Optional[str] = None
+    transaction_factor_length: Optional[int] = 256
+
     # Buyer & Seller Private Information (Confidential Evidence)
     buyer_private_info: Optional[Dict[str, Any]] = None
     seller_private_info: Optional[Dict[str, Any]] = None
@@ -229,6 +234,8 @@ class TransactionManager:
             self.state.design_encoding_details = None
             self.state.C_D = None
             self.state.blinding_factor_D = None
+            self.state.transaction_factor_T = None
+            self.state.transaction_factor_hex = None
             self.state.watermark_W = None
             self.state.C_W = None
             self.state.blinding_factor_W = None
@@ -354,13 +361,24 @@ class TransactionManager:
             "reconstruction_method": {
                 "generation_function": "Symmetric HKDF with HMAC-SHA256 (RFC 5869 extract-and-expand)",
                 "watermark_generation_rule": "Symmetric HKDF with HMAC-SHA256 (RFC 5869 extract-and-expand)",
+                "formula": "W = HKDF-SHA256(k_tx, D || B || T)",
+                "key_k_tx": self.state.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777"),
+                "transaction_factor_T": self.state.transaction_factor_T or "Not generated yet",
+                "transaction_factor_hex": self.state.transaction_factor_hex or "Not generated yet",
+                "transaction_factor_length": 256,
+                "design_encoding_D": self.state.design_encoding_D or "Not generated yet",
+                "design_encoding_length": len(self.state.design_encoding_D) if has_D else (251 if self.state.encoding_rule_id == "iir_butterworth_5rule_v1" else 143),
+                "buyer_contribution_B": self.state.buyer_bitstream_B or "Not generated yet",
+                "buyer_contribution_length": len(self.state.buyer_bitstream_B) if self.state.buyer_bitstream_B else 555,
+                "salt": "Hardware_IP_Protection_Salt_2026",
                 "precise_inputs": [
-                    "Master Key: k_tx (symmetric transaction credential secret)",
-                    f"Transaction Context: {self.state.transaction_id}:{self.state.seller_id}:{self.state.buyer_id}:{self.state.license_type}:{self.state.design_id}",
-                    "Salt: SHA-256 digest of canonical transaction record"
+                    f"Master Key: {self.state.transaction_credentials.get('k_tx', 'K_tx_symmetric_credential_secret_777')}",
+                    f"Design Encoding D: {len(self.state.design_encoding_D) if has_D else (251 if self.state.encoding_rule_id == 'iir_butterworth_5rule_v1' else 143)} bits",
+                    f"Buyer Contribution B: {len(self.state.buyer_bitstream_B) if self.state.buyer_bitstream_B else 555} bits",
+                    f"Transaction Factor T: 256 bits ({self.state.transaction_factor_hex[:16] + '...' if self.state.transaction_factor_hex else '256 bits'})",
                 ],
-                "precise_inputs_and_ordering": f"1. Key: {self.state.transaction_credentials.get('k_tx', 'K_tx')}; 2. Info: {self.state.transaction_id}:{self.state.seller_id}:{self.state.buyer_id}:{self.state.license_type}:{self.state.design_id}; 3. Length: 32 bytes (256 bits)",
-                "input_ordering": f"1. Key: {self.state.transaction_credentials.get('k_tx', 'K_tx')}; 2. Info: {self.state.transaction_id}:{self.state.seller_id}:{self.state.buyer_id}:{self.state.license_type}:{self.state.design_id}; 3. Length: 32 bytes (256 bits)",
+                "precise_inputs_and_ordering": f"1. Key: {self.state.transaction_credentials.get('k_tx', 'K_tx')}; 2. D: {len(self.state.design_encoding_D) if has_D else (251 if self.state.encoding_rule_id == 'iir_butterworth_5rule_v1' else 143)}b; 3. B: 555b; 4. T: 256b; 5. Length: 32 bytes (256 bits)",
+                "input_ordering": f"1. Key: {self.state.transaction_credentials.get('k_tx', 'K_tx')}; 2. D: {len(self.state.design_encoding_D) if has_D else (251 if self.state.encoding_rule_id == 'iir_butterworth_5rule_v1' else 143)}b; 3. B: 555b; 4. T: 256b; 5. Length: 32 bytes (256 bits)",
                 "output_length": "256 bits (32 bytes)",
                 "output_length_bits": 256,
                 "canonical_representation": "256-bit binary sequence derived via deterministic HKDF-Expand",
@@ -585,7 +603,24 @@ class TransactionManager:
             }
         }
 
+        shared_wm_info = {
+            "title": "Shared Watermark Derivation Information",
+            "generation_formula": "W = HKDF-SHA256(k_tx, D || B || T)",
+            "key_k_tx": self.state.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777"),
+            "transaction_factor_T": self.state.transaction_factor_T,
+            "transaction_factor_hex": self.state.transaction_factor_hex,
+            "transaction_factor_length": 256,
+            "buyer_contribution_B": self.state.buyer_bitstream_B,
+            "design_encoding_D": self.state.design_encoding_D,
+            "encoding_rule": self.state.encoding_rule_id,
+            "encoding_length": len(self.state.design_encoding_D) if self.state.design_encoding_D else (251 if self.state.encoding_rule_id == "iir_butterworth_5rule_v1" else 143),
+            "salt": "Hardware_IP_Protection_Salt_2026",
+            "info_prefix": "HardwareIP_Transaction_Watermark_v1",
+        }
+
         return {
+            # Shared Watermark Info visible to Buyer
+            "shared_watermark_generation_info": shared_wm_info,
             # Legacy flat fields
             "bitstream_B": B if has_CB else None,
             "contribution_method": "Fingerprint-Derived Bitstream Extraction (Demonstration Standard)",
@@ -687,8 +722,12 @@ class TransactionManager:
         """
         if not self.state.buyer_approved or not self.state.buyer_bitstream_B:
             raise ValueError("Buyer contribution must be approved and received before generating watermark.")
-        if not self.state.design_encoding_D:
-            raise ValueError("Original design encoding D must be generated before generating watermark.")
+
+        # Ensure design encoding D matches the active encoding rule mode (251 bits for 5-rule, 143 bits for 4-rule)
+        is_five_rule = (self.state.encoding_rule_id == "iir_butterworth_5rule_v1")
+        expected_d_len = 251 if is_five_rule else 143
+        if not self.state.design_encoding_D or len(self.state.design_encoding_D) != expected_d_len:
+            self.generate_original_encoding()
 
         tx_id = transaction_id or self.state.transaction_id or "TX-001"
         s_id = seller_id or self.state.seller_id or "SELLER-001"
@@ -701,6 +740,23 @@ class TransactionManager:
         canonical_str = DesignHasher.canonicalize_dfg(dfg.to_dict())
         design_hash = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
+        from hardware_ip_protection.crypto.watermark_generator import SymmetricHKDFWatermarkGenerator
+        generator = SymmetricHKDFWatermarkGenerator()
+
+        # Combine transaction-based info into a 256-bit binary transaction factor T
+        tx_meta = {
+            "transaction_id": tx_id,
+            "seller_id": s_id,
+            "buyer_id": b_id,
+            "license_type": lic_type,
+            "design_hash": design_hash,
+            "protocol_version": "1.0",
+        }
+        t_bits = generator.compute_transaction_factor(tx_meta)
+        self.state.transaction_factor_T = t_bits
+        self.state.transaction_factor_hex = hex(int(t_bits, 2))[2:].zfill(64)
+        self.state.transaction_factor_length = len(t_bits)
+
         tx_info = {
             "transaction_id": tx_id,
             "seller_id": s_id,
@@ -709,11 +765,10 @@ class TransactionManager:
             "design_hash": design_hash,
             "design_encoding_D": self.state.design_encoding_D,
             "buyer_contribution_B": self.state.buyer_bitstream_B,
+            "transaction_factor_T": t_bits,
         }
         credentials = {"k_tx": key_tx}
 
-        from hardware_ip_protection.crypto.watermark_generator import SymmetricHKDFWatermarkGenerator
-        generator = SymmetricHKDFWatermarkGenerator()
         wm_len = 256 if (watermark_length is None or watermark_length == "auto") else int(watermark_length)
         wm = generator.generate(
             tx_info,
@@ -721,8 +776,10 @@ class TransactionManager:
             watermark_length=wm_len,
             D=self.state.design_encoding_D,
             B=self.state.buyer_bitstream_B,
+            T=t_bits,
         )
 
+        prev_w = self.state.watermark_W
         self.state.transaction_id = tx_id
         self.state.seller_id = s_id
         self.state.buyer_id = b_id
@@ -730,8 +787,27 @@ class TransactionManager:
         self.state.transaction_credentials = {"k_tx": key_tx}
         self.state.design_hash = design_hash
         self.state.watermark_W = wm.canonical_bitstream
-        self.state.embedded_watermark_length = len(wm.canonical_bitstream)
+        self.state.embedded_watermark_length = len(wm.bitstream)
         self.state.is_full_watermark = True
+
+        # Invalidate old downstream artifacts if watermark changed
+        if prev_w and prev_w != self.state.watermark_W:
+            self.state.C_W = None
+            self.state.blinding_factor_W = None
+            self.state.W1 = None
+            self.state.C_W1 = None
+            self.state.blinding_factor_W1 = None
+            self.state.protected_W2 = None
+            self.state.watermarked_RTL = None
+            self.state.secured_encoding_E_S = None
+            self.state.C_ES = "NOT_REQUIRED"
+            self.state.blinding_factor_ES = None
+            self.state.encoding_comparison_result = None
+            self.state.behavioral_validation_result = None
+            self.state.stage4_es_calculated = False
+            self.state.stage4_encodings_compared = False
+            self.state.stage4_behavioral_verified = False
+            self.state.stage4_completed = False
 
         self.state.seller_private_info = self._build_seller_private_info()
         return self.state
@@ -800,6 +876,27 @@ class TransactionManager:
         lic_type = self.state.license_type or "exclusive"
         key_tx = self.state.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777")
 
+        # Ensure design encoding D matches active rule mode
+        is_five_rule = (self.state.encoding_rule_id == "iir_butterworth_5rule_v1")
+        expected_d_len = 251 if is_five_rule else 143
+        if not self.state.design_encoding_D or len(self.state.design_encoding_D) != expected_d_len:
+            self.generate_original_encoding()
+
+        # Ensure transaction factor T exists
+        if not self.state.transaction_factor_T:
+            from hardware_ip_protection.crypto.watermark_generator import SymmetricHKDFWatermarkGenerator
+            t_bits = SymmetricHKDFWatermarkGenerator.compute_transaction_factor({
+                "transaction_id": tx_id,
+                "seller_id": s_id,
+                "buyer_id": b_id,
+                "license_type": lic_type,
+                "design_hash": self.state.design_hash or "",
+                "protocol_version": "1.0",
+            })
+            self.state.transaction_factor_T = t_bits
+            self.state.transaction_factor_hex = hex(int(t_bits, 2))[2:].zfill(64)
+            self.state.transaction_factor_length = len(t_bits)
+
         dfg = create_iir_butterworth()
         pipeline = ProtectionPipeline()
 
@@ -815,13 +912,15 @@ class TransactionManager:
                 "license_type": lic_type,
                 "design_encoding_D": self.state.design_encoding_D,
                 "buyer_contribution_B": self.state.buyer_bitstream_B,
+                "transaction_factor_T": self.state.transaction_factor_T,
             },
             "design_encoding_D": self.state.design_encoding_D,
             "buyer_contribution_B": self.state.buyer_bitstream_B,
+            "transaction_factor_T": self.state.transaction_factor_T,
             "transaction_credentials": {"k_tx": key_tx},
             "watermark_length": actual_len,
             "encoding_scope": None,
-            "encoding_mode": "five_rule" if self.state.encoding_rule_id == "iir_butterworth_5rule_v1" else "four_rule",
+            "encoding_mode": "five_rule" if is_five_rule else "four_rule",
         }
 
         if self.state.C_W and self.state.blinding_factor_W:
@@ -846,7 +945,7 @@ class TransactionManager:
         self.state.secured_encoding_E_S = prot_ctx.get("structural_encoding")
         self.state.protection_id = rec.protection_id
         self.state.watermark_mapping = prot_ctx.get("watermark_mapping")
-        self.state.embedded_watermark_length = len(wm.canonical_bitstream)
+        self.state.embedded_watermark_length = len(wm.bitstream)
 
         # Cache active session for dispute verification
         from hardware_ip_protection.web.app import active_sessions
@@ -1142,27 +1241,33 @@ class TransactionManager:
 
     def get_securing_report(self) -> Dict[str, Any]:
         """
-        Retrieves the authoritative technical cost and overhead report for the current securing run.
+        Retrieves the authoritative Watermark Strength Analysis report for the 4 watermark lengths
+        (32, 64, 128, 256 bits) on the IIR Butterworth benchmark.
         Read-only operation.
         """
-        from hardware_ip_protection.pipeline.securing_report import SecuringReportGenerator
-        from hardware_ip_protection.pipeline.repository import ProtectionRepository
+        from hardware_ip_protection.pipeline.watermark_strength_analyzer import WatermarkStrengthAnalyzer
+        tx_id = self.state.transaction_id or "TX-2026-0042"
+        s_id = self.state.seller_id or "SELLER-CORE-01"
+        b_id = self.state.buyer_id or "BUYER-SOC-CORP"
+        lic_type = self.state.license_type or "exclusive"
+        key_tx = self.state.transaction_credentials.get("k_tx", "K_tx_symmetric_credential_secret_777")
+        d_bits = self.state.design_encoding_D
+        b_bits = self.state.buyer_bitstream_B
+        t_bits = self.state.transaction_factor_T
 
-        # Return in-memory report if present
-        if self.state.securing_report:
-            return self.state.securing_report
-
-        # Try to load latest from DB
-        try:
-            latest = ProtectionRepository.get_instance().get_latest_securing_report_for_transaction(self.state.transaction_id)
-            if latest and latest.get("design_id") == self.state.design_id:
-                self.state.securing_report = latest
-                return latest
-        except Exception:
-            pass
-
-        # Generate dynamically from current state
-        rep = SecuringReportGenerator.generate_report(state=self.state)
+        rep = WatermarkStrengthAnalyzer.run_all_experiments(
+            tx_id=tx_id,
+            seller_id=s_id,
+            buyer_id=b_id,
+            license_type=lic_type,
+            k_tx=key_tx,
+            design_encoding_D=d_bits,
+            buyer_bitstream_B=b_bits,
+            transaction_factor_T=t_bits,
+        )
+        rep["overall_status"] = "SUCCESS"
+        rep["report_name"] = "Watermark Strength Analysis"
+        rep["transaction_id"] = tx_id
         self.state.securing_report = rep
         return rep
 

@@ -1741,7 +1741,8 @@ class VerifierEngine:
         try:
             gen = SymmetricHKDFWatermarkGenerator()
             wm_len = len(w_reconstructed) if w_reconstructed else 256
-            wm_obj = gen.generate(tx_rec, {"k_tx": k_tx}, watermark_length=wm_len, D=d_val, B=b_val)
+            t_val = gen.compute_transaction_factor(tx_rec)
+            wm_obj = gen.generate(tx_rec, {"k_tx": k_tx}, watermark_length=wm_len, D=d_val, B=b_val, T=t_val)
             w_expected = wm_obj.canonical_bitstream
 
             w_exp_hash = hashlib.sha256(w_expected.encode("utf-8")).hexdigest()
@@ -1749,7 +1750,7 @@ class VerifierEngine:
 
             if w_reconstructed and w_reconstructed == w_expected:
                 rel_status = "MATCH"
-                notes = f"Watermark-generation relationship W' = F(D', B', tx_record, k_tx) verified independently (MATCH). Canonical Hash: {w_rec_hash}."
+                notes = f"Watermark-generation relationship W' = F(D', B', T', k_tx) verified independently (MATCH). Canonical Hash: {w_rec_hash}."
             else:
                 rel_status = "MISMATCH"
                 notes = f"Extracted watermark hash ({w_rec_hash}) does not match independently derived expected watermark hash ({w_exp_hash}) (MISMATCH)."
@@ -1759,7 +1760,7 @@ class VerifierEngine:
             w_rec_hash = ""
             notes = f"Relationship verification error: {e}"
 
-        formula_str = 'W\' == HKDF_SHA256(ikm=k_tx, salt=HKDF_SALT, info="HardwareIP_Transaction_Watermark_v1:" || canonical_json(tx, D\', B\'), L=32 bytes)'
+        formula_str = 'W\' == HKDF_SHA256(ikm=k_tx, salt=HKDF_SALT, info="HardwareIP_Transaction_Watermark_v1:" || canonical_json(D\', B\', T\'), L=32 bytes)'
 
         return VerificationStageResult(
             step_number=11,

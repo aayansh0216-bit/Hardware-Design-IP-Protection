@@ -1,0 +1,1405 @@
+{
+  "fingerprint": "69c56ae23f0371b5167a4d6d3279e09cd976bfadb23b66ce3854b8efd729f596",
+  "report": {
+    "analysis_completed": true,
+    "is_stale": false,
+    "encoding_version": "251-bit Secured Hardware IP Encoding (v1.1)",
+    "question_bank_version": "v1.1-124q (120 active + 4 fallback)",
+    "simulated_reconstruction_completed": true,
+    "final_commitment_verified": true,
+    "commitment_detail": "Pedersen commitment C_ES mathematically verified against stored commitment (MATCH). Candidate bitstream opens commitment 03f1c80bf2f714ee... over NIST P-256 in 2.03 ms. Notice: Verification proves mathematical opening; it does not constitute legal proof of ownership.",
+    "analysis_execution_time_ms": 1423.44,
+    "simulated_attacker_time_ms": 1416.22,
+    "commitment_verification_time_ms": 2.03,
+    "timestamp": "2026-11-01T17:44:28.969737+00:00",
+    "checkpoints": [
+      {
+        "checkpoint_id": "CP0",
+        "name": "Initial State",
+        "structure_established": "Baseline prior to interrogation (0 questions answered)",
+        "candidate_model": "Simplified fixed-popcount (95 ones in 251 positions)",
+        "candidate_count_display": "1.0514e+71",
+        "candidate_probability_str": "9.5109e-72",
+        "e4_residual_entropy": 138.69,
+        "rule5_residual_entropy": 85.65,
+        "combined_residual_entropy": 235.93,
+        "interval_info_gain": 0.0,
+        "cumulative_info_gain": 0.0,
+        "cumulative_questions": 0,
+        "cumulative_evaluations": 0,
+        "cumulative_state_transitions": 0,
+        "notes": "Candidate space bounded by aggregate length 251 and popcount 95 ones; partition unknown."
+      },
+      {
+        "checkpoint_id": "CP1",
+        "name": "143b & 108b Partition Established",
+        "structure_established": "Part 1 length (143 bits) and Part 2 length (108 bits) established",
+        "candidate_model": "Partitioned fixed-popcount (E4: 67/143, Rule 5: 28/108)",
+        "candidate_count_display": "3.4026e+67",
+        "candidate_probability_str": "2.9389e-68",
+        "e4_residual_entropy": 138.69,
+        "rule5_residual_entropy": 85.65,
+        "combined_residual_entropy": 224.34,
+        "interval_info_gain": 11.59,
+        "cumulative_info_gain": 11.59,
+        "cumulative_questions": 6,
+        "cumulative_evaluations": 12,
+        "cumulative_state_transitions": 12,
+        "notes": "Partitioning into 143b E4 and 108b R5 resolves hypergeometric split uncertainty (11.59 bits)."
+      },
+      {
+        "checkpoint_id": "CP2",
+        "name": "13 \u00d7 11 E4 Unit Structure Established",
+        "structure_established": "E4 stream divided into 13 uniform units of 11 bits each",
+        "candidate_model": "Partitioned fixed-popcount (E4: 67/143, Rule 5: 28/108)",
+        "candidate_count_display": "3.4026e+67",
+        "candidate_probability_str": "2.9389e-68",
+        "e4_residual_entropy": 138.69,
+        "rule5_residual_entropy": 85.65,
+        "combined_residual_entropy": 224.34,
+        "interval_info_gain": 0.0,
+        "cumulative_info_gain": 11.59,
+        "cumulative_questions": 11,
+        "cumulative_evaluations": 22,
+        "cumulative_state_transitions": 22,
+        "notes": "Unit boundaries established; individual unit popcounts/bit values remain unresolved (0 bit interval gain)."
+      },
+      {
+        "checkpoint_id": "CP3",
+        "name": "Detailed E4 Unit Structure Established",
+        "structure_established": "Per-unit field layout 13 \u00d7 (A:4 || B:4 || C:1 || D:2) established",
+        "candidate_model": "Partitioned fixed-popcount (E4: 67/143, Rule 5: 28/108)",
+        "candidate_count_display": "3.4026e+67",
+        "candidate_probability_str": "2.9389e-68",
+        "e4_residual_entropy": 138.69,
+        "rule5_residual_entropy": 85.65,
+        "combined_residual_entropy": 224.34,
+        "interval_info_gain": 0.0,
+        "cumulative_info_gain": 11.59,
+        "cumulative_questions": 19,
+        "cumulative_evaluations": 38,
+        "cumulative_state_transitions": 38,
+        "notes": "Field widths established; field bit values unresolved prior to Block 1 popcount queries (0 bit interval gain)."
+      },
+      {
+        "checkpoint_id": "CP4",
+        "name": "E4 Fully Reconstructed",
+        "structure_established": "All 143 bits of E4 uniquely determined across all 13 units",
+        "candidate_model": "Part 1 unique (N=1), Rule 5 popcount-constrained (28/108)",
+        "candidate_count_display": "6.0706e+25",
+        "candidate_probability_str": "1.6473e-26",
+        "e4_residual_entropy": 0.0,
+        "rule5_residual_entropy": 85.65,
+        "combined_residual_entropy": 85.65,
+        "interval_info_gain": 138.69,
+        "cumulative_info_gain": 150.28,
+        "cumulative_questions": 76,
+        "cumulative_evaluations": 425,
+        "cumulative_state_transitions": 152,
+        "notes": "E4 residual entropy is exactly 0.00 bits. Rule 5 conditioned on E4 retains popcount uncertainty (85.65 bits)."
+      },
+      {
+        "checkpoint_id": "CP5",
+        "name": "27 \u00d7 4 Rule 5 Structure Established",
+        "structure_established": "Rule 5 layout established: 27 pairs of 4-bit codes (2b var parity || 2b reg parity)",
+        "candidate_model": "Part 1 unique (N=1), Rule 5 popcount-constrained (28/108)",
+        "candidate_count_display": "6.0706e+25",
+        "candidate_probability_str": "1.6473e-26",
+        "e4_residual_entropy": 0.0,
+        "rule5_residual_entropy": 85.65,
+        "combined_residual_entropy": 85.65,
+        "interval_info_gain": 0.0,
+        "cumulative_info_gain": 150.28,
+        "cumulative_questions": 82,
+        "cumulative_evaluations": 454,
+        "cumulative_state_transitions": 165,
+        "notes": "27 register allocation pairs defined at 4 bits per pair; individual parity bits remain unresolved (0 bit interval gain)."
+      },
+      {
+        "checkpoint_id": "CP6",
+        "name": "Complete 251-Bit Secured Encoding Reconstructed",
+        "structure_established": "All 251 bits of E_S (E4 || Rule 5) reconstructed and verified",
+        "candidate_model": "Unique candidate bitstream (N=1)",
+        "candidate_count_display": "1",
+        "candidate_probability_str": "1.0",
+        "e4_residual_entropy": 0.0,
+        "rule5_residual_entropy": 0.0,
+        "combined_residual_entropy": 0.0,
+        "interval_info_gain": 85.65,
+        "cumulative_info_gain": 235.93,
+        "cumulative_questions": 120,
+        "cumulative_evaluations": 816,
+        "cumulative_state_transitions": 241,
+        "notes": "Complete 251-bit secured encoding uniquely determined. Combined residual entropy is exactly 0.00 bits."
+      }
+    ],
+    "total_questions_asked": 120,
+    "total_questions_answered": 120,
+    "questions_division_e4_r5": 6,
+    "questions_e4_units": 5,
+    "questions_e4_detailed_layout": 8,
+    "questions_e4_reconstruction": 59,
+    "questions_r5_structure": 4,
+    "questions_r5_reconstruction": 38,
+    "total_candidate_evaluations": 817,
+    "total_search_states_examined": 242,
+    "total_candidate_update_operations": 120,
+    "total_commitment_checks_performed": 1,
+    "reconstruction_succeeded": true,
+    "reconstructed_bitstream_length": 251,
+    "assumptions_and_constraints": "Forward-order interrogation (E4 first, Rule 5 second). Candidate space modeled via fixed-popcount combinations over verified bitstream statistics: E4 (67 ones / 143 bits), Rule 5 (28 ones / 108 bits), Joint (95 ones / 251 bits). Structural dimension establishment (CP2, CP3, CP5) does not reduce fixed-popcount bitstring counts prior to value queries. Commitment verified under NIST P-256 elliptic curve Pedersen group.",
+    "question_trace": [
+      {
+        "step_number": 1,
+        "question_id": "Q0.1",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "How many total bits comprise the complete hardware structural encoding?",
+        "reference_answer": 251,
+        "facts_established": [
+          "total_bits"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 2,
+        "question_id": "Q0.2",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "How many zero bits are present across the entire encoding stream?",
+        "reference_answer": 156,
+        "facts_established": [
+          "total_zeros",
+          "total_ones"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 3,
+        "question_id": "Q0.3",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the complete encoding divided into independent structural parts?",
+        "reference_answer": "yes",
+        "facts_established": [
+          "parts_divided"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 4,
+        "question_id": "Q0.3_count",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Into how many independent structural parts is the complete encoding divided?",
+        "reference_answer": 2,
+        "facts_established": [
+          "parts_count"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 5,
+        "question_id": "Q0.3_equal",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Do all independent structural parts have equal bit lengths?",
+        "reference_answer": "no",
+        "facts_established": [
+          "parts_equal_length"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 6,
+        "question_id": "Q0.4",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the bit length of the first structural segment?",
+        "reference_answer": 143,
+        "facts_established": [
+          "part1_len",
+          "part2_len"
+        ],
+        "checkpoint_reached": "CP1"
+      },
+      {
+        "step_number": 7,
+        "question_id": "Q0.5",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "How many zero bits are contained in this first segment?",
+        "reference_answer": 76,
+        "facts_established": [
+          "part1_zeros",
+          "part1_ones"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 8,
+        "question_id": "Q0.6_has_units",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Is this structural segment divided into discrete repeated units?",
+        "reference_answer": "yes",
+        "facts_established": [
+          "has_units"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 9,
+        "question_id": "Q0.6",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "How many discrete repeated units comprise this segment?",
+        "reference_answer": 13,
+        "facts_established": [
+          "num_units"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 10,
+        "question_id": "Q0.7",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Are all units in this segment uniform in bit length?",
+        "reference_answer": "yes",
+        "facts_established": [
+          "units_uniform"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 11,
+        "question_id": "Q0.8",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the bit length of each individual unit?",
+        "reference_answer": 11,
+        "facts_established": [
+          "unit_len"
+        ],
+        "checkpoint_reached": "CP2"
+      },
+      {
+        "step_number": 12,
+        "question_id": "Q0.9_has_fields",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Does each unit comprise distinct informational fields?",
+        "reference_answer": "yes",
+        "facts_established": [
+          "has_fields"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 13,
+        "question_id": "Q0.9",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "How many distinct informational fields comprise each unit?",
+        "reference_answer": 4,
+        "facts_established": [
+          "fields_per_unit"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 14,
+        "question_id": "Q0.10",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the internal field layout identical across all units?",
+        "reference_answer": "yes",
+        "facts_established": [
+          "layout_uniform"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 15,
+        "question_id": "Q0.10b",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "Do all informational fields within a unit have identical bit widths?",
+        "reference_answer": "no",
+        "facts_established": [
+          "fields_equal_width"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 16,
+        "question_id": "Q0.11",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the bit width of the first field (Field A) in each unit?",
+        "reference_answer": 4,
+        "facts_established": [
+          "f_a_len"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 17,
+        "question_id": "Q0.12",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the bit width of the second field (Field B) in each unit?",
+        "reference_answer": 4,
+        "facts_established": [
+          "f_b_len"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 18,
+        "question_id": "Q0.13",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the bit width of the third field (Field C) in each unit?",
+        "reference_answer": 1,
+        "facts_established": [
+          "f_c_len"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 19,
+        "question_id": "Q0.14",
+        "block_id": "b0",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the bit width of the final field (Field D) in each unit?",
+        "reference_answer": 2,
+        "facts_established": [
+          "f_d_len"
+        ],
+        "checkpoint_reached": "CP3"
+      },
+      {
+        "step_number": 20,
+        "question_id": "Q1.1",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 1?",
+        "reference_answer": 4,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 21,
+        "question_id": "Q1.2",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 2?",
+        "reference_answer": 4,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 22,
+        "question_id": "Q1.3",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 3?",
+        "reference_answer": 4,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 23,
+        "question_id": "Q1.4",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 4?",
+        "reference_answer": 6,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 24,
+        "question_id": "Q1.5",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 5?",
+        "reference_answer": 5,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 25,
+        "question_id": "Q1.6",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 6?",
+        "reference_answer": 6,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 26,
+        "question_id": "Q1.7",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 7?",
+        "reference_answer": 7,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 27,
+        "question_id": "Q1.8",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 8?",
+        "reference_answer": 7,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 28,
+        "question_id": "Q1.9",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 9?",
+        "reference_answer": 3,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 29,
+        "question_id": "Q1.10",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 10?",
+        "reference_answer": 5,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 30,
+        "question_id": "Q1.11",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 11?",
+        "reference_answer": 6,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 31,
+        "question_id": "Q1.12",
+        "block_id": "b1",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total count of one bits in unit 12?",
+        "reference_answer": 4,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 32,
+        "question_id": "Q2.1",
+        "block_id": "b2",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total number of one bits in field A across all units?",
+        "reference_answer": 16,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 33,
+        "question_id": "Q2.2",
+        "block_id": "b2",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total number of one bits in field B across all units?",
+        "reference_answer": 25,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 34,
+        "question_id": "Q2.3",
+        "block_id": "b2",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the total number of one bits in field C across all units?",
+        "reference_answer": 7,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 35,
+        "question_id": "Q2.4",
+        "block_id": "b2",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the total number of one bits in the complete stream an even integer?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 36,
+        "question_id": "Q3.1",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 2 equal to the value in unit 1?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 37,
+        "question_id": "Q3.2",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 3 equal to the value in unit 2?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 38,
+        "question_id": "Q3.3",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 4 equal to the value in unit 3?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 39,
+        "question_id": "Q3.4",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 5 equal to the value in unit 4?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 40,
+        "question_id": "Q3.5",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 6 equal to the value in unit 5?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 41,
+        "question_id": "Q3.6",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 7 equal to the value in unit 6?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 42,
+        "question_id": "Q3.7",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 8 equal to the value in unit 7?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 43,
+        "question_id": "Q3.8",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 9 equal to the value in unit 8?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 44,
+        "question_id": "Q3.9",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 10 equal to the value in unit 9?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 45,
+        "question_id": "Q3.10",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 11 equal to the value in unit 10?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 46,
+        "question_id": "Q3.11",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 12 equal to the value in unit 11?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 47,
+        "question_id": "Q3.12",
+        "block_id": "b3",
+        "phase": "Phase 1: E4",
+        "prompt": "Is the value of field A in unit 13 equal to the value in unit 12?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 48,
+        "question_id": "Q4.1",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 1?",
+        "reference_answer": 4,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 49,
+        "question_id": "Q4.2",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 3?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 50,
+        "question_id": "Q4.3",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 6?",
+        "reference_answer": 5,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 51,
+        "question_id": "Q4.4",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 9?",
+        "reference_answer": 0,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 52,
+        "question_id": "Q4.5",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 11?",
+        "reference_answer": 5,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 53,
+        "question_id": "Q4.6",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 12?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 54,
+        "question_id": "Q4.7",
+        "block_id": "b4",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field A in unit 13?",
+        "reference_answer": 5,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 55,
+        "question_id": "Q5.8",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 4?",
+        "reference_answer": 3,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 56,
+        "question_id": "Q5.9",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 8?",
+        "reference_answer": 3,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 57,
+        "question_id": "Q5.1",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 1?",
+        "reference_answer": 2,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 58,
+        "question_id": "Q5.2",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 3?",
+        "reference_answer": 3,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 59,
+        "question_id": "Q5.3",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 6?",
+        "reference_answer": 3,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 60,
+        "question_id": "Q5.4",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 9?",
+        "reference_answer": 2,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 61,
+        "question_id": "Q5.5",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 11?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 62,
+        "question_id": "Q5.6",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 12?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 63,
+        "question_id": "Q5.7",
+        "block_id": "b5",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field D in unit 13?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 64,
+        "question_id": "Q6.1",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the numerical sum of field B values across all 13 units?",
+        "reference_answer": 91,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 65,
+        "question_id": "Q6.2",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 1?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 66,
+        "question_id": "Q6.3",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 2?",
+        "reference_answer": 2,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 67,
+        "question_id": "Q6.4",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 3?",
+        "reference_answer": 8,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 68,
+        "question_id": "Q6.5",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 4?",
+        "reference_answer": 3,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 69,
+        "question_id": "Q6.6",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 5?",
+        "reference_answer": 4,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 70,
+        "question_id": "Q6.7",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 6?",
+        "reference_answer": 9,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 71,
+        "question_id": "Q6.8",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 7?",
+        "reference_answer": 5,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 72,
+        "question_id": "Q6.9",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 8?",
+        "reference_answer": 6,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 73,
+        "question_id": "Q6.10",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 9?",
+        "reference_answer": 10,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 74,
+        "question_id": "Q6.11",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 10?",
+        "reference_answer": 7,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 75,
+        "question_id": "Q6.12",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 11?",
+        "reference_answer": 11,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 76,
+        "question_id": "Q6.13",
+        "block_id": "b6",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the integer value represented by field B in unit 12?",
+        "reference_answer": 12,
+        "facts_established": [],
+        "checkpoint_reached": "CP4"
+      },
+      {
+        "step_number": 77,
+        "question_id": "Q7.1",
+        "block_id": "b7",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the binary bit value of field C in unit 9?",
+        "reference_answer": 0,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 78,
+        "question_id": "Q7.2",
+        "block_id": "b7",
+        "phase": "Phase 1: E4",
+        "prompt": "What is the binary bit value of field C in unit 10?",
+        "reference_answer": 1,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 79,
+        "question_id": "Q8.0",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does the second structural segment encode Rule 5 register allocation pairs?",
+        "reference_answer": "yes",
+        "facts_established": [
+          "has_rule5"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 80,
+        "question_id": "Q8.1",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What is the total bit length of the second structural segment (Rule 5 register/storage-variable encoding)?",
+        "reference_answer": 108,
+        "facts_established": [
+          "r5_len"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 81,
+        "question_id": "Q8.2",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "How many discrete (register, variable) allocation pairs comprise this Rule 5 segment?",
+        "reference_answer": 27,
+        "facts_established": [
+          "r5_pair_count"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 82,
+        "question_id": "Q8.3",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What is the bit length of each encoded allocation pair?",
+        "reference_answer": 4,
+        "facts_established": [
+          "r5_pair_width"
+        ],
+        "checkpoint_reached": "CP5"
+      },
+      {
+        "step_number": 83,
+        "question_id": "Q8.7",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "How many zero bits are present across the 108 bits of this Rule 5 segment?",
+        "reference_answer": 80,
+        "facts_established": [
+          "r5_zeros"
+        ],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 84,
+        "question_id": "Q8.4",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What is the bit width of the register parity code within each pair?",
+        "reference_answer": 2,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 85,
+        "question_id": "Q8.5",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What is the bit width of the storage variable parity code within each pair?",
+        "reference_answer": 2,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 86,
+        "question_id": "Q8.6",
+        "block_id": "b8",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Are pairs arranged in deterministic sequential order of storage variables (V1 through V27)?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 87,
+        "question_id": "Q9.1",
+        "block_id": "b9",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What 2-bit binary code represents an odd parity assignment (odd register index or odd variable index)?",
+        "reference_answer": "01",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 88,
+        "question_id": "Q9.2",
+        "block_id": "b9",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What 2-bit binary code represents an even parity assignment (even register index or even variable index)?",
+        "reference_answer": "00",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 89,
+        "question_id": "Q9.3",
+        "block_id": "b9",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "What is the total count of one bits in the Rule 5 segment?",
+        "reference_answer": 28,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 90,
+        "question_id": "Q9.4",
+        "block_id": "b9",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does every pair follow the concatenation format [Register Code (2b)] || [Variable Code (2b)]?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 91,
+        "question_id": "Q10.1",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "How many of the 27 pairs have odd storage variable parity (odd index V1, V3, ... V27)?",
+        "reference_answer": 14,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 92,
+        "question_id": "Q10.2",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "How many of the 27 pairs have even storage variable parity (even index V2, V4, ... V26)?",
+        "reference_answer": 13,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 93,
+        "question_id": "Q10.3",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "How many total odd-register assignments (register parity code '01') occur in this secured allocation?",
+        "reference_answer": 14,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 94,
+        "question_id": "Q10.4",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "How many total even-register assignments (register parity code '00') occur in this secured allocation?",
+        "reference_answer": 13,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 95,
+        "question_id": "Q10.5",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "In the first 9 pairs (V1 to V9, Chunk 1), how many one bits are present in total?",
+        "reference_answer": 10,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 96,
+        "question_id": "Q10.6",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "In the middle 9 pairs (V10 to V18, Chunk 2), how many one bits are present in total?",
+        "reference_answer": 8,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 97,
+        "question_id": "Q10.7",
+        "block_id": "b10",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "In the final 9 pairs (V19 to V27, Chunk 3), how many one bits are present in total?",
+        "reference_answer": 10,
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 98,
+        "question_id": "Q11.1",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V1 have an odd register parity assignment (e.g. code '01')?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 99,
+        "question_id": "Q11.2",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V2 have an odd register parity assignment?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 100,
+        "question_id": "Q11.3",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V3 have an odd register parity assignment?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 101,
+        "question_id": "Q11.4",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V4 have an odd register parity assignment?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 102,
+        "question_id": "Q11.5",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V5 share register allocation parity with variable V2?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 103,
+        "question_id": "Q11.6",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V6 share register allocation parity with variable V3?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 104,
+        "question_id": "Q11.7",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V7 have an odd register parity assignment?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 105,
+        "question_id": "Q11.8",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V8 have an odd register parity assignment?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 106,
+        "question_id": "Q11.9",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V10 have an odd register parity assignment?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 107,
+        "question_id": "Q11.10",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V11 share register allocation parity with variable V4?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 108,
+        "question_id": "Q11.11",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V12 share register allocation parity with variable V7?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 109,
+        "question_id": "Q11.12",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V13 share register allocation parity with variable V10?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 110,
+        "question_id": "Q11.13",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V14 have an odd register parity assignment?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 111,
+        "question_id": "Q11.14",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Do storage variables V14 through V17 exhibit strictly alternating register parity (Odd, Even, Odd, Even)?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 112,
+        "question_id": "Q11.15",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V18 share register allocation parity with variable V1?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 113,
+        "question_id": "Q11.16",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V19 share register allocation parity with variable V14?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 114,
+        "question_id": "Q11.17",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V20 share register allocation parity with variable V9?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 115,
+        "question_id": "Q11.18",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V21 have an odd register parity assignment?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 116,
+        "question_id": "Q11.19",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V22 have an odd register parity assignment?",
+        "reference_answer": "no",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 117,
+        "question_id": "Q11.20",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V23 share register allocation parity with variable V8?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 118,
+        "question_id": "Q11.21",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V24 share register allocation parity with variable V21?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 119,
+        "question_id": "Q11.22",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V25 share register allocation parity with variable V16?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": null
+      },
+      {
+        "step_number": 120,
+        "question_id": "Q11.23",
+        "block_id": "b11",
+        "phase": "Phase 2: Rule 5",
+        "prompt": "Does storage variable V26 share register allocation parity with variable V17?",
+        "reference_answer": "yes",
+        "facts_established": [],
+        "checkpoint_reached": "CP6"
+      }
+    ]
+  }
+}

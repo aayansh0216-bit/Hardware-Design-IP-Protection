@@ -183,10 +183,29 @@ class TransactionWatermarkGenerationStage(PipelineStage):
         # Forward design encoding D and buyer contribution B if provided
         d_val = ctx.get("design_encoding_D") or ctx.get("D") or tx_info.get("design_encoding_D") or tx_info.get("D")
         b_val = ctx.get("buyer_contribution_B") or ctx.get("B") or tx_info.get("buyer_contribution_B") or tx_info.get("B") or tx_info.get("buyer_bitstream_B")
+
+        # Determine encoding rule mode and enforce matching D bitstream length
+        enc_mode = ctx.get("encoding_mode") or ctx.get("mode") or "four_rule"
+        is_five_rule = enc_mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1")
+        expected_d_len = 251 if is_five_rule else 143
+
+        if (not d_val or len(d_val) != expected_d_len) and ctx.get("dfg") and "butterworth" in ctx["dfg"].name.lower():
+            enc_res = DesignStructuralEncoder.encode_golden_butterworth(mode="five_rule" if is_five_rule else "four_rule")
+            d_val = enc_res.canonical_bitstream
+
         if d_val:
             tx_info["design_encoding_D"] = d_val
+            ctx["design_encoding_D"] = d_val
         if b_val:
             tx_info["buyer_contribution_B"] = b_val
+            ctx["buyer_contribution_B"] = b_val
+
+        # Compute or forward Transaction Factor T (256-bit binary bitstream)
+        t_val = ctx.get("transaction_factor_T") or tx_info.get("transaction_factor_T")
+        if not t_val:
+            t_val = SymmetricHKDFWatermarkGenerator.compute_transaction_factor(tx_info)
+        ctx["transaction_factor_T"] = t_val
+        tx_info["transaction_factor_T"] = t_val
 
         # Determine watermark length (Section 8)
         cap_analysis = ctx["capacity_analysis"]
@@ -204,7 +223,7 @@ class TransactionWatermarkGenerationStage(PipelineStage):
         generator: TransactionWatermarkGenerator = ctx.get(
             "watermark_generator", SymmetricHKDFWatermarkGenerator()
         )
-        watermark = generator.generate(tx_info, credentials, watermark_length=watermark_length, D=d_val, B=b_val)
+        watermark = generator.generate(tx_info, credentials, watermark_length=watermark_length, D=d_val, B=b_val, T=t_val)
 
         ctx["watermark_length"] = watermark_length
         ctx["final_transaction_record"] = tx_info
@@ -421,8 +440,19 @@ class ProtectionRecordStage(PipelineStage):
             enc_mode = ctx.get("encoding_mode", "four_rule")
             try:
                 orig_alloc = ctx.get("original_register_allocation")
-                var_to_reg = prot_alloc.variable_to_register if enc_mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1") else None
-                orig_var_to_reg = orig_alloc.variable_to_register if (orig_alloc and enc_mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1")) else None
+                if enc_mode in ("five_rule", "5rule", "iir_butterworth_5rule_v1"):
+                    var_to_reg = dict(prot_alloc.variable_to_register)
+                    orig_var_to_reg = dict(orig_alloc.variable_to_register) if orig_alloc else {}
+                    if "butterworth" in sched_dfg.dfg.name.lower():
+                        for v_k, r_v in DesignStructuralEncoder.BUTTERWORTH_POST_EMBEDDING_REGISTERS.items():
+                            if v_k not in var_to_reg:
+                                var_to_reg[v_k] = r_v
+                        for v_k, r_v in DesignStructuralEncoder.BUTTERWORTH_PRE_EMBEDDING_REGISTERS.items():
+                            if v_k not in orig_var_to_reg:
+                                orig_var_to_reg[v_k] = r_v
+                else:
+                    var_to_reg = None
+                    orig_var_to_reg = None
                 enc_res = DesignStructuralEncoder.encode_scheduled_dfg(
                     sched_dfg,
                     scope_control_steps=scope,

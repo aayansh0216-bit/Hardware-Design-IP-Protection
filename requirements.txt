@@ -1,36 +1,22 @@
 # ==============================================================================
-# Runtime dependencies
-# Required to run the application (web server + full protection pipeline)
+# Hardware IP Protection V1 - Python Dependencies
 # ==============================================================================
 
-# Web framework — imported in hardware_ip_protection/web/app.py
-fastapi
+# Core Web Framework and Server
+fastapi>=0.110.0
+uvicorn>=0.28.0
 
-# ASGI server — used to launch the web application:
-#   python -m uvicorn hardware_ip_protection.web.app:app --host 127.0.0.1 --port 8000
-uvicorn
+# Data Validation, Serialization, and Domain Models
+pydantic>=2.6.0
 
-# Data validation / schemas — imported in pipeline/schemas.py and web/app.py
-pydantic
+# Cryptographic Primitives
+# NIST P-256 Elliptic Curve arithmetic for Pedersen commitments (crypto/pedersen.py)
+ecdsa>=0.18.0
 
-# Elliptic-curve arithmetic for Pedersen commitments (NIST P-256)
-# Imported in crypto/pedersen.py: import ecdsa
-ecdsa
+# RFC 5869 HKDF-HMAC-SHA256 key derivation and SHA-256 design hashing
+cryptography>=42.0.0
 
-# HKDF-HMAC-SHA256 watermark derivation
-# Imported in crypto/watermark_generator.py:
-#   from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-#   from cryptography.hazmat.primitives import hashes
-cryptography
-
-# ==============================================================================
-# Test / development dependencies
-# Required only to run the test suite
-# ==============================================================================
-
-# Test runner — imported in every test file
-pytest
-
-# HTTP client required by fastapi.testclient (used in test_v1_refinement_pass.py
-# and test_v1_canonical_pipeline.py)
-httpx
+# Testing and Test Client
+pytest>=8.0.0
+httpx>=0.27.0
+anyio>=4.0.0

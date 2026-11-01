@@ -287,15 +287,18 @@ class SecuringReportGenerator:
 
         # 9. Watermark Generation W
         w_len = len(w_bitstream) if w_bitstream else 0
+        b_bitstream = st.get("buyer_bitstream_B") or ""
+        d_len_val = len(d_bitstream) if d_bitstream else (251 if is_five_rule else 143)
+        b_len_val = len(b_bitstream) if b_bitstream else 555
         add_stage(
             sid="TransactionWatermarkGenerationStage",
-            sname="9. Transaction Watermark Derivation (W = HKDF(tx_info))",
+            sname="9. Transaction Watermark Derivation (W = HKDF(D || B || T))",
             executed=has_w,
             passed=has_w,
             default_ms=2.20,
-            inputs=[f"tx:{tx_id}", f"seller:{seller_id}", f"buyer:{buyer_id}", f"license:{license_type}", "k_tx:credential"],
+            inputs=[f"D:{d_len_val}bits", f"B:{b_len_val}bits", "T:256bits", "k_tx:credential"],
             outputs=[f"watermark_W:{w_len}bits"],
-            measurements={"algorithm": "HKDF-SHA256", "canonical_length": 256, "derived_length": w_len},
+            measurements={"algorithm": "HKDF-SHA256", "formula": "W = HKDF-SHA256(k_tx, D || B || T)", "canonical_length": 256, "derived_length": w_len},
         )
 
         # 10. Watermark Commitment C_W
